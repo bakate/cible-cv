@@ -1,0 +1,147 @@
+{
+  "project_meta": {
+    "app_name": "Cible CV",
+    "language": "fr",
+    "description": "Personal productivity tool to automatically generate a tailored CV and cover letter based on a job offer."
+  },
+  "design_strategy": {
+    "theme": "Light",
+    "archetype": "Archetype 3 Variant (Pastel & Soft mixed with High-Contrast Neo-Brutalist)",
+    "vibe": "Optimistic, structured, premium SaaS, high-energy. Rejects boring corporate gray.",
+    "core_principles": [
+      "No generic UI: Use sharp high-contrast borders with soft pastel fill colors.",
+      "Step-by-step clarity: Wizard flow must feel like a directed story, not a tax form.",
+      "Dashboard density: Information must be scannable, bento-grid style, maximizing space."
+    ]
+  },
+  "typography": {
+    "fonts": {
+      "headings": {
+        "family": "Cabinet Grotesk, sans-serif",
+        "tailwind_class": "font-sans font-black tracking-tight",
+        "import_url": "https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@900,800,700,500,400&display=swap"
+      },
+      "body": {
+        "family": "Outfit, sans-serif",
+        "tailwind_class": "font-sans",
+        "import_url": "https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600&display=swap"
+      },
+      "mono": {
+        "family": "JetBrains Mono, monospace",
+        "tailwind_class": "font-mono text-sm tracking-tight",
+        "import_url": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+      }
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl font-black tracking-tighter leading-none text-zinc-900",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-zinc-900",
+      "h3": "text-xl sm:text-2xl font-bold tracking-tight text-zinc-900",
+      "h4": "text-lg sm:text-xl font-semibold text-zinc-900",
+      "body": "text-base leading-relaxed text-zinc-700",
+      "small_label": "text-xs font-bold uppercase tracking-[0.2em] text-zinc-500"
+    }
+  },
+  "colors": {
+    "background": {
+      "page": "bg-[#FDFDFD]",
+      "surface": "bg-white",
+      "surface_alt": "bg-[#F4F4F5]"
+    },
+    "brand_accents": {
+      "primary": "bg-[#0A0A0A]", 
+      "primary_hover": "bg-[#27272A]",
+      "primary_text": "text-white",
+      "action": "bg-[#FF3E1A]",
+      "action_hover": "bg-[#E03515]",
+      "action_text": "text-white",
+      "highlight_yellow": "bg-[#FFEB3B]",
+      "highlight_mint": "bg-[#E8F5E9]",
+      "highlight_lavender": "bg-[#F3E8FF]"
+    },
+    "text": {
+      "main": "text-zinc-900",
+      "muted": "text-zinc-500",
+      "inverse": "text-white"
+    },
+    "borders": {
+      "default": "border-zinc-900",
+      "subtle": "border-zinc-200"
+    }
+  },
+  "layout_and_spacing": {
+    "strategy": "Generous Spacing inside bento grids.",
+    "container": "max-w-7xl mx-auto px-6 sm:px-8 lg:px-12",
+    "bento_grid": {
+      "dashboard": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+      "wizard_layout": "grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12",
+      "items": "col-span-1 md:col-span-2 lg:col-span-3"
+    },
+    "spacing_scale": {
+      "section_y": "py-20 lg:py-32",
+      "card_inner": "p-6 sm:p-8"
+    }
+  },
+  "surface_styles": {
+    "card_neo_brutalist": "bg-white border-2 border-zinc-900 shadow-[4px_4px_0px_0px_rgba(24,24,27,1)] rounded-lg transition-transform hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(24,24,27,1)]",
+    "card_flat": "bg-white border border-zinc-200 rounded-xl shadow-sm",
+    "input_field": "bg-zinc-50 border-2 border-zinc-900 rounded-md px-4 py-3 text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-[#FF3E1A] focus:border-transparent transition-all",
+    "glass_header": "bg-white/80 backdrop-blur-xl border-b-2 border-zinc-900 sticky top-0 z-50"
+  },
+  "components": {
+    "buttons": {
+      "primary": "inline-flex items-center justify-center px-8 py-4 bg-[#FF3E1A] text-white font-bold text-lg border-2 border-zinc-900 rounded-md shadow-[4px_4px_0px_0px_rgba(24,24,27,1)] hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(24,24,27,1)] transition-all",
+      "secondary": "inline-flex items-center justify-center px-6 py-3 bg-white text-zinc-900 font-bold border-2 border-zinc-900 rounded-md shadow-[4px_4px_0px_0px_rgba(24,24,27,1)] hover:bg-zinc-50 transition-all",
+      "ghost": "inline-flex items-center justify-center px-4 py-2 text-zinc-600 font-semibold hover:text-zinc-900 hover:bg-zinc-100 rounded-md transition-all"
+    },
+    "wizard_flow": {
+      "sidebar_steps": "flex flex-col gap-4 border-r-2 border-zinc-900 p-8 bg-zinc-50 min-h-screen",
+      "step_active": "flex items-center gap-3 text-zinc-900 font-bold bg-white border-2 border-zinc-900 p-4 rounded-md shadow-[2px_2px_0px_0px_rgba(24,24,27,1)]",
+      "step_inactive": "flex items-center gap-3 text-zinc-400 font-medium p-4 hover:text-zinc-600 transition-colors"
+    },
+    "cv_templates": {
+      "corporate_modern": "bg-white border border-zinc-200 p-8 max-w-[210mm] min-h-[297mm] shadow-lg font-sans text-sm",
+      "startup_tech": "bg-zinc-50 border-l-8 border-[#FF3E1A] p-8 max-w-[210mm] min-h-[297mm] shadow-lg font-sans text-sm"
+    },
+    "tags": {
+      "keyword_match": "inline-flex items-center px-3 py-1 bg-[#E8F5E9] text-zinc-900 font-bold text-xs border border-zinc-900 rounded-full",
+      "keyword_missing": "inline-flex items-center px-3 py-1 bg-[#F3E8FF] text-zinc-900 font-bold text-xs border border-zinc-900 rounded-full"
+    }
+  },
+  "motion": {
+    "page_transition": "animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out",
+    "hover_lift": "transition-transform duration-200 ease-out hover:-translate-y-1",
+    "stagger_children": "transition-all duration-300 ease-out delay-[calc(100ms*var(--index))]"
+  },
+  "media": {
+    "images": [
+      {
+        "url": "https://images.unsplash.com/photo-1622579521534-8252f7da47fd?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwyfHxtaW5pbWFsJTIwbW9kZXJuJTIwZGVzayUyMHBhcGVyfGVufDB8fHx8MTc4MTA5NjA0Nnww&ixlib=rb-4.1.0&q=85",
+        "description": "Minimal workspace background",
+        "usage": "Use as a muted, low-opacity background for the welcome/auth screen or empty state."
+      }
+    ],
+    "icons": {
+      "library": "lucide-react",
+      "rules": "Use stroke-width='2' or '2.5'. Must match the brutalist solid feel."
+    }
+  },
+  "testing_attributes": {
+    "rules": "All interactive elements must include data-testid. Kebab-case, role-based.",
+    "examples": [
+      "data-testid='upload-cv-button'",
+      "data-testid='job-url-input'",
+      "data-testid='generate-cv-button'",
+      "data-testid='export-pdf-button'",
+      "data-testid='wizard-step-2'"
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Ensure the UI uses French text entirely (e.g., 'Importer votre CV', 'Générer le document').",
+    "Use standard `.js` and `.jsx` extensions (not `.tsx`).",
+    "The 4-step wizard should be heavily visual, breaking the steps into distinct, animated states.",
+    "For the file upload, implement a drag-and-drop zone using the neo-brutalist card style.",
+    "The dashboard layout displaying matches and history must utilize a tight 'Control Room' bento grid to show data efficiently.",
+    "Apply `Cabinet Grotesk` for all main headings (H1-H3) and `Outfit` for body text.",
+    "Do not use generic Shadcn components out of the box; they must be wrapped or restyled using the defined `surface_styles` with 2px borders and solid drop shadows."
+  ]
+}
