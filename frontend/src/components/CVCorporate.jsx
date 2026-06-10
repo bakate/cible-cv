@@ -22,26 +22,29 @@ export default function CVCorporate({ cv, photo }) {
     c.phone && { label: "Tél", value: c.phone },
     c.location && { label: "Lieu", value: c.location },
     c.linkedin && { label: "LinkedIn", value: c.linkedin },
+    c.github && { label: "GitHub", value: c.github },
     c.website && { label: "Web", value: c.website },
   ].filter(Boolean);
 
   return (
     <div className="cv-page padded font-sans" id="cv-render-area" data-testid="cv-template-corporate">
-      <header className="flex items-center gap-5 mb-5 pb-4 border-b-2 border-black">
-        {photo && (
-          <img src={photo} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-black shrink-0" />
-        )}
-        <div className="flex-1 min-w-0">
-          <h1 className="font-display text-[28px] leading-[1.05] mb-1">{cv.full_name || ""}</h1>
-          <p className="text-[13px] text-[#FF3E1A] font-semibold mb-2 leading-snug">{cv.headline || ""}</p>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10.5px] text-zinc-700">
-            {contactRows.map((r, i) => (
-              <div key={i} className="flex gap-1.5 min-w-0">
-                <span className="font-bold text-zinc-500 uppercase tracking-wide text-[9px] mt-[2px] shrink-0">{r.label}</span>
-                <span className="truncate">{r.value}</span>
-              </div>
-            ))}
+      <header className="mb-5 pb-3 border-b-2 border-black">
+        <div className="flex items-start gap-5">
+          {photo && (
+            <img src={photo} alt="" className="w-20 h-20 rounded-full object-cover border-2 border-black shrink-0" />
+          )}
+          <div className="flex-1 min-w-0">
+            <h1 className="font-display text-[28px] leading-[1.05] mb-1">{cv.full_name || ""}</h1>
+            <p className="text-[13px] text-[#FF3E1A] font-semibold leading-snug">{cv.headline || ""}</p>
           </div>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[10.5px] text-zinc-700">
+          {contactRows.map((r, i) => (
+            <span key={i} className="inline-flex items-baseline gap-1.5">
+              <span className="font-bold text-zinc-500 uppercase tracking-wide text-[9px]">{r.label}</span>
+              <span>{r.value}</span>
+            </span>
+          ))}
         </div>
       </header>
 

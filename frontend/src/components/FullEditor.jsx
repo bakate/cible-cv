@@ -102,6 +102,7 @@ export default function FullEditor({ data, setData, tab }) {
             <Field label="Téléphone"><TxtInput value={c.phone || ""} onChange={(e) => updContact({ phone: e.target.value })} data-testid="edit-phone" /></Field>
             <Field label="Lieu"><TxtInput value={c.location || ""} onChange={(e) => updContact({ location: e.target.value })} data-testid="edit-location" /></Field>
             <Field label="LinkedIn"><TxtInput value={c.linkedin || ""} onChange={(e) => updContact({ linkedin: e.target.value })} data-testid="edit-linkedin" /></Field>
+            <Field label="GitHub"><TxtInput value={c.github || ""} onChange={(e) => updContact({ github: e.target.value })} data-testid="edit-github" /></Field>
             <Field label="Site web" className="col-span-2"><TxtInput value={c.website || ""} onChange={(e) => updContact({ website: e.target.value })} data-testid="edit-website" /></Field>
           </div>
         </div>

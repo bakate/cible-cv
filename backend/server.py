@@ -235,6 +235,7 @@ Génère un objet JSON structuré exactement comme suit:
       "phone": "string ou null",
       "location": "string ou null",
       "linkedin": "string ou null",
+      "github": "string ou null",
       "website": "string ou null"
     }},
     "summary": "résumé pro 3-4 lignes orienté annonce",

@@ -24,6 +24,7 @@ export default function CVStartup({ cv, photo }) {
             {c.phone && <p><span className="text-[#FF3E1A] font-bold mr-1">☎</span>{c.phone}</p>}
             {c.location && <p><span className="text-[#FF3E1A] font-bold mr-1">◎</span>{c.location}</p>}
             {c.linkedin && <p className="break-all"><span className="text-[#FF3E1A] font-bold mr-1">in</span>{c.linkedin}</p>}
+            {c.github && <p className="break-all"><span className="text-[#FF3E1A] font-bold mr-1">{`</>`}</span>{c.github}</p>}
             {c.website && <p className="break-all"><span className="text-[#FF3E1A] font-bold mr-1">⌘</span>{c.website}</p>}
           </div>
 
