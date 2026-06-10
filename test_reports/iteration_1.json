@@ -1,0 +1,37 @@
+{
+  "summary": "Backend testing for Cible CV API: 15/15 pytest tests passed against the external preview URL. Verified health, URL/PDF parsing, full Claude Sonnet 4.5 generation flow (cv/letter/adaptations + MongoDB persistence with uuid id), and full CRUD on /api/generations (list, get, put, delete) including 404 paths and empty-patch 400.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/parse/url", "issue": "https://example.com body is barely above the 80-char minimum; returns 400 'Contenu insuffisant' depending on parsing. Tested fallback URL works. Consider lowering threshold or returning the raw text regardless for trivial pages."},
+      {"endpoint": "GET /api/generations", "issue": "Listing pops 'adaptations' and only surfaces match_score; loses position/company keywords. Functional, but UI may want keywords_matched count too."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_ciblecv.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py uses synchronous requests.get inside fetch_url_text called from an async endpoint - blocks the event loop. Recommend httpx.AsyncClient or run_in_executor.",
+    "extract_pdf_text / extract_docx_text also sync; fine for small files but should run in a threadpool for large uploads.",
+    "@app.on_event('shutdown') is deprecated in FastAPI; migrate to lifespan handler.",
+    "load_dotenv at import time + os.environ[...] direct access - fails fast (good), but no validation that EMERGENT_LLM_KEY is set until first /generate call (returns 500 instead of failing at startup).",
+    "No file-size limit on /parse/pdf - potential DoS via large uploads.",
+    "No rate limiting on /generate which calls a paid LLM - cost risk.",
+    "GenerationUpdate.profile_text/job_text not allowed for update - intentional? Consider if regenerate needs new inputs.",
+    "_extract_json is robust for fenced/plain JSON but won't handle nested code fences edge cases - acceptable."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ciblecv.py (new)",
+    "/app/test_reports/pytest/pytest_results.xml (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "not tested (skipped per request)"},
+  "test_credentials": "n/a - no auth in this app",
+  "seed_data_creation": "Tests create one generation via /api/generate and delete it at the end; no residual data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend external URL: https://cv-matcher-41.preview.emergentagent.com/api. All 15 backend tests in /app/backend/tests/test_ciblecv.py pass. /generate takes ~25-30s with Claude Sonnet 4.5; use 120s timeout. PDF tests rely on reportlab (installed). Frontend was intentionally skipped.",
+  "rca of the issue": "n/a - no failures"
+}

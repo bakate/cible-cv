@@ -1,56 +1,23 @@
-import { useEffect } from "react";
-import "@/App.css";
+import "@/index.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
-import { HOME } from "@/constants/testIds";
+import { Toaster } from "@/components/ui/sonner";
+import Header from "@/components/Header";
+import Wizard from "@/pages/Wizard";
+import History from "@/pages/History";
+import Preview from "@/pages/Preview";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
-
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
+export default function App() {
   return (
-    <div>
-      <header className="App-header">
-        <a
-          data-testid={HOME.emergentLink}
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
-
-function App() {
-  return (
-    <div className="App">
-      <BrowserRouter>
+    <BrowserRouter>
+      <div className="min-h-screen dot-grid">
+        <Header />
         <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
+          <Route path="/" element={<Wizard />} />
+          <Route path="/history" element={<History />} />
+          <Route path="/preview/:id" element={<Preview />} />
         </Routes>
-      </BrowserRouter>
-    </div>
+      </div>
+      <Toaster position="top-right" richColors />
+    </BrowserRouter>
   );
 }
-
-export default App;
