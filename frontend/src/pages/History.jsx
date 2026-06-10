@@ -40,7 +40,15 @@ export default function History() {
                 </div>
                 <span className="chip chip-mint">{g.match_score || 0}/100</span>
               </div>
-              <div className="text-[11px] font-mono text-zinc-500 mb-1">{new Date(g.created_at).toLocaleDateString("fr-FR")}</div>
+              <div className="text-[11px] font-mono text-zinc-500 mb-1">
+                {new Date(g.created_at).toLocaleString("fr-FR", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </div>
               <h3 className="font-bold text-lg leading-tight mb-1">{g.position}</h3>
               <p className="text-sm text-zinc-600">{g.company}</p>
               <div className="mt-4 text-xs uppercase tracking-widest font-bold text-zinc-400">

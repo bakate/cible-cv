@@ -50,9 +50,14 @@ export default function CVStartup({ cv, photo, accent }) {
           {(cv.skills || []).length > 0 && (
             <div className="mb-5">
               <h3 className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--cv-accent)] mb-2">Stack</h3>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1.5">
                 {cv.skills.map((s, i) => (
-                  <span key={i} className="text-[10.5px] bg-white/10 border border-white/20 px-2 py-[2px] rounded">{s}</span>
+                  <span
+                    key={i}
+                    className="inline-flex items-center text-[10.5px] leading-none bg-white/10 border border-white/20 px-2.5 py-[5px] rounded"
+                  >
+                    {s}
+                  </span>
                 ))}
               </div>
             </div>

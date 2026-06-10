@@ -116,7 +116,12 @@ export default function CVCorporate({ cv, photo, accent }) {
             <Section title="Compétences">
               <div className="flex flex-wrap gap-1.5">
                 {cv.skills.map((s, i) => (
-                  <span key={i} className="text-[10.5px] bg-zinc-100 border border-zinc-300 px-2 py-[2px] rounded">{s}</span>
+                  <span
+                    key={i}
+                    className="inline-flex items-center text-[10.5px] leading-none bg-zinc-100 border border-zinc-300 px-2.5 py-[5px] rounded"
+                  >
+                    {s}
+                  </span>
                 ))}
               </div>
             </Section>
