@@ -78,17 +78,39 @@ export default function Preview() {
         const fullImgHmm = (canvas.height * imgWmm) / canvas.width;
         const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
         const imgData = canvas.toDataURL("image/jpeg", 0.95);
+        let imgX = 0;
+        let imgY = 0;
+        let imgW = imgWmm;
+        let imgH = fullImgHmm;
         if (fullImgHmm <= pageHmm + 0.5) {
-          pdf.addImage(imgData, "JPEG", 0, 0, imgWmm, fullImgHmm);
+          // fits naturally
         } else if (fullImgHmm <= pageHmm * 1.15) {
-          // Slight overflow → squish vertically (anamorphic, barely visible) to fit single page.
-          pdf.addImage(imgData, "JPEG", 0, 0, imgWmm, pageHmm);
+          imgH = pageHmm; // slight anamorphic squish
         } else {
-          // Big overflow → uniform scale to fit one page, centered.
           const scale = pageHmm / fullImgHmm;
-          const finalW = imgWmm * scale;
-          pdf.addImage(imgData, "JPEG", (pageWmm - finalW) / 2, 0, finalW, pageHmm);
+          imgW = imgWmm * scale;
+          imgH = pageHmm;
+          imgX = (pageWmm - imgW) / 2;
         }
+        pdf.addImage(imgData, "JPEG", imgX, imgY, imgW, imgH);
+
+        // Add clickable link annotations on top of the raster image.
+        const cloneRect = clone.getBoundingClientRect();
+        const linkEls = clone.querySelectorAll("[data-pdf-link]");
+        const pxToMmX = imgW / cloneRect.width;
+        const pxToMmY = imgH / cloneRect.height;
+        linkEls.forEach((el) => {
+          const r = el.getBoundingClientRect();
+          const url = el.getAttribute("data-pdf-link");
+          if (!url) return;
+          pdf.link(
+            imgX + (r.left - cloneRect.left) * pxToMmX,
+            imgY + (r.top - cloneRect.top) * pxToMmY,
+            r.width * pxToMmX,
+            r.height * pxToMmY,
+            { url },
+          );
+        });
         const safeName = (data.cv.full_name || "candidat").replace(/\s+/g, "_");
         const filename = which === "cv"
           ? `CV-${safeName}-${data.company}.pdf`

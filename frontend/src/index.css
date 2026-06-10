@@ -139,7 +139,7 @@ html, body {
     line-height: 1.45;
     overflow: hidden;
 }
-.cv-page.padded { padding: 14mm; }
+.cv-page.padded { padding: 16mm; }
 
 @media print {
     body { background: #fff; }
