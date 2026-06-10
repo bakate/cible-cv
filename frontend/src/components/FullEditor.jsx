@@ -95,6 +95,41 @@ export default function FullEditor({ data, setData, tab }) {
       </Field>
 
       <details className="border-2 border-black rounded-md">
+        <summary className="cursor-pointer p-3 font-bold bg-zinc-50">Apparence</summary>
+        <div className="p-3 space-y-3">
+          <Field label="Couleur d'accent (titre, puces, séparateurs)">
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={cv.theme?.accent || "#FF3E1A"}
+                onChange={(e) => updCv({ theme: { ...(cv.theme || {}), accent: e.target.value } })}
+                className="w-12 h-10 rounded-md border-2 border-black cursor-pointer"
+                data-testid="edit-accent-color"
+              />
+              <TxtInput
+                value={cv.theme?.accent || "#FF3E1A"}
+                onChange={(e) => updCv({ theme: { ...(cv.theme || {}), accent: e.target.value } })}
+                className="font-mono"
+              />
+              <div className="flex gap-1">
+                {["#FF3E1A", "#0EA5E9", "#10B981", "#8B5CF6", "#0A0A0A", "#D97706"].map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => updCv({ theme: { ...(cv.theme || {}), accent: c } })}
+                    style={{ background: c }}
+                    className="w-6 h-6 rounded-full border-2 border-black"
+                    aria-label={`Choisir ${c}`}
+                    data-testid={`preset-color-${c.replace("#", "")}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </Field>
+        </div>
+      </details>
+
+      <details className="border-2 border-black rounded-md">
         <summary className="cursor-pointer p-3 font-bold bg-zinc-50">Contact</summary>
         <div className="p-3 space-y-2">
           <div className="grid grid-cols-2 gap-2">

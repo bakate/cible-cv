@@ -1,11 +1,11 @@
 /* eslint-disable react/no-unescaped-entities */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { Link2, FileUp, PenLine, Loader2, ArrowRight, ArrowLeft, Image as ImageIcon, Sparkles, X } from "lucide-react";
+import { Link2, FileUp, PenLine, Loader2, ArrowRight, ArrowLeft, Image as ImageIcon, Sparkles, X, Pin, Trash2 } from "lucide-react";
 import Stepper from "../components/Stepper";
 import FileDrop from "../components/FileDrop";
-import { parsePdf, parseUrl, generate } from "../lib/api";
+import { parsePdf, parseUrl, generate, getBaseProfile, deleteBaseProfile } from "../lib/api";
 
 const PROFILE_MODES = [
   { key: "pdf", label: "CV / Profil PDF", icon: FileUp, hint: "PDF, DOCX ou export LinkedIn" },
@@ -34,6 +34,30 @@ export default function Wizard() {
   const [template, setTemplate] = useState("corporate");
   const [photo, setPhoto] = useState("");
   const [busy, setBusy] = useState(false);
+  const [baseProfile, setBaseProfile] = useState(null);
+
+  useEffect(() => {
+    getBaseProfile().then((d) => {
+      if (d?.exists) {
+        setBaseProfile(d);
+        if (d.photo_data_url) setPhoto(d.photo_data_url);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const useBaseProfile = () => {
+    if (!baseProfile) return;
+    setProfileText(baseProfile.profile_text || "");
+    toast.success("CV de base chargé", { description: "Passe directement à l'offre d'emploi." });
+    setStep(2);
+  };
+
+  const forgetBaseProfile = async () => {
+    if (!window.confirm("Oublier le CV de base ?")) return;
+    await deleteBaseProfile();
+    setBaseProfile(null);
+    toast.success("CV de base supprimé");
+  };
 
   const handlePhoto = (file) => {
     if (!file) { setPhoto(""); return; }
@@ -126,6 +150,38 @@ export default function Wizard() {
         <section className="brut-card-flat p-6 sm:p-10" data-testid="step-1-content">
           <h2 className="font-display text-2xl sm:text-3xl mb-2">1. Ton profil</h2>
           <p className="text-sm text-zinc-600 mb-6">D'où viennent tes infos ?</p>
+
+          {baseProfile && (
+            <div
+              className="mb-6 p-5 rounded-lg border-2 border-black bg-[#FFEB3B] flex items-center justify-between gap-4 flex-wrap"
+              data-testid="base-profile-banner"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <Pin className="w-5 h-5 shrink-0" strokeWidth={2.5} />
+                <div className="min-w-0">
+                  <div className="font-bold">CV de base disponible</div>
+                  <div className="text-xs text-zinc-700">Mis à jour le {new Date(baseProfile.updated_at).toLocaleString("fr-FR")}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={useBaseProfile}
+                  className="brut-btn"
+                  data-testid="use-base-profile-button"
+                >
+                  Utiliser ce CV
+                </button>
+                <button
+                  onClick={forgetBaseProfile}
+                  className="brut-btn brut-btn-ghost !py-2 !px-3"
+                  data-testid="forget-base-profile-button"
+                  aria-label="Supprimer le CV de base"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             {PROFILE_MODES.map((m) => (

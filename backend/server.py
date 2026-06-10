@@ -376,6 +376,34 @@ async def delete_generation(gen_id: str):
     return {"ok": True}
 
 
+# ---- Base profile ("CV de base") ----
+@api.get("/profile/base")
+async def get_base_profile():
+    doc = await db.base_profile.find_one({"id": "default"}, {"_id": 0})
+    if not doc:
+        return {"exists": False}
+    return {"exists": True, **doc}
+
+
+@api.put("/profile/base")
+async def put_base_profile(payload: Dict[str, Any]):
+    doc = {
+        "id": "default",
+        "profile_text": payload.get("profile_text", ""),
+        "cv": payload.get("cv") or {},
+        "photo_data_url": payload.get("photo_data_url"),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.base_profile.update_one({"id": "default"}, {"$set": doc}, upsert=True)
+    return {"exists": True, **doc}
+
+
+@api.delete("/profile/base")
+async def delete_base_profile():
+    await db.base_profile.delete_one({"id": "default"})
+    return {"ok": True}
+
+
 app.include_router(api)
 app.add_middleware(
     CORSMiddleware,

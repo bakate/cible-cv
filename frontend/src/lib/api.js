@@ -43,3 +43,7 @@ export const deleteGeneration = async (id) => {
   const { data } = await api.delete(`/generations/${id}`);
   return data;
 };
+
+export const getBaseProfile = async () => (await api.get("/profile/base")).data;
+export const saveBaseProfile = async (payload) => (await api.put("/profile/base", payload)).data;
+export const deleteBaseProfile = async () => (await api.delete("/profile/base")).data;

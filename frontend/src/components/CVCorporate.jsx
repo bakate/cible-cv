@@ -9,7 +9,7 @@ const Section = ({ title, children }) => (
 
 const Bullet = ({ children }) => (
   <li className="flex gap-2 text-[12.5px] text-zinc-800 leading-snug mb-1">
-    <span className="text-[#FF3E1A] font-bold leading-[1.1] mt-[1px]">›</span>
+    <span className="text-[color:var(--cv-accent)] font-bold leading-[1.1] mt-[1px]">›</span>
     <span className="flex-1">{children}</span>
   </li>
 );
@@ -21,7 +21,7 @@ const linkify = (kind, value) => {
   return value.startsWith("http") ? value : `https://${value}`;
 };
 
-export default function CVCorporate({ cv, photo }) {
+export default function CVCorporate({ cv, photo, accent }) {
   if (!cv) return null;
   const c = cv.contact || {};
   const contactRows = [
@@ -34,7 +34,12 @@ export default function CVCorporate({ cv, photo }) {
   ].filter(Boolean);
 
   return (
-    <div className="cv-page padded font-sans" id="cv-render-area" data-testid="cv-template-corporate">
+    <div
+      className="cv-page padded font-sans"
+      id="cv-render-area"
+      data-testid="cv-template-corporate"
+      style={{ "--cv-accent": accent || "#FF3E1A" }}
+    >
       <header className="mb-6 pb-4 border-b-2 border-black">
         <div className="flex items-start gap-6">
           {photo && (
@@ -42,7 +47,7 @@ export default function CVCorporate({ cv, photo }) {
           )}
           <div className="flex-1 min-w-0">
             <h1 className="font-display text-[34px] leading-[1.05] mb-3">{cv.full_name || ""}</h1>
-            <p className="text-[15px] text-[#FF3E1A] font-semibold leading-snug">{cv.headline || ""}</p>
+            <p className="text-[15px] text-[color:var(--cv-accent)] font-semibold leading-snug">{cv.headline || ""}</p>
           </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1.5 text-[11.5px] text-zinc-700">

@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Download, Copy, Loader2, FileText, Mail, Sparkles, ArrowLeft, Trash2, Pencil } from "lucide-react";
+import { Download, Copy, Loader2, FileText, Mail, Sparkles, ArrowLeft, Trash2, Pencil, Pin } from "lucide-react";
 import CVCorporate from "../components/CVCorporate";
 import CVStartup from "../components/CVStartup";
 import LetterTemplate from "../components/LetterTemplate";
 import FullEditor from "../components/FullEditor";
-import { getGeneration, updateGeneration, deleteGeneration } from "../lib/api";
+import { getGeneration, updateGeneration, deleteGeneration, saveBaseProfile } from "../lib/api";
 
 export default function Preview() {
   const { id } = useParams();
@@ -141,9 +141,23 @@ export default function Preview() {
     window.location.href = "/history";
   };
 
+  const pinAsBase = async () => {
+    try {
+      await saveBaseProfile({
+        profile_text: data.profile_text,
+        cv: data.cv,
+        photo_data_url: data.photo_data_url,
+      });
+      toast.success("CV de base mis à jour", { description: "Tu pourras le réutiliser à chaque nouvelle candidature." });
+    } catch (e) {
+      toast.error("Échec de la sauvegarde");
+    }
+  };
+
   const cv = data.cv || {};
   const adp = data.adaptations || {};
   const matchScore = adp.match_score || 0;
+  const accent = cv.theme?.accent || "#FF3E1A";
 
   return (
     <div className="max-w-[1500px] mx-auto px-6 sm:px-8 lg:px-12 py-8 no-print">
@@ -158,6 +172,14 @@ export default function Preview() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={pinAsBase}
+            className="brut-btn brut-btn-ghost"
+            data-testid="pin-base-button"
+            title="Sauvegarder comme CV de base pour les prochaines candidatures"
+          >
+            <Pin className="w-4 h-4" /> CV de base
+          </button>
           <button
             onClick={() => editing ? persistEdits() : setEditing(true)}
             className={`brut-btn ${editing ? "brut-btn-yellow" : "brut-btn-ghost"}`}
@@ -248,8 +270,8 @@ export default function Preview() {
             <div className="mx-auto" style={{ width: "210mm" }}>
               <div ref={cvRef} style={{ display: tab === "cv" ? "block" : "none" }}>
                 {data.template === "startup"
-                  ? <CVStartup cv={cv} photo={data.photo_data_url} />
-                  : <CVCorporate cv={cv} photo={data.photo_data_url} />}
+                  ? <CVStartup cv={cv} photo={data.photo_data_url} accent={accent} />
+                  : <CVCorporate cv={cv} photo={data.photo_data_url} accent={accent} />}
               </div>
               <div ref={letterRef} style={{ display: tab === "letter" ? "block" : "none" }}>
                 <LetterTemplate letter={data.letter} sender={cv} recipientCompany={data.company} />
