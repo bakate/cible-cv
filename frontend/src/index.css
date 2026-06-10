@@ -134,11 +134,12 @@ html, body {
     min-height: 297mm;
     background: #fff;
     color: #0A0A0A;
-    padding: 18mm;
     box-sizing: border-box;
     font-family: "Outfit", sans-serif;
-    line-height: 1.5;
+    line-height: 1.45;
+    overflow: hidden;
 }
+.cv-page.padded { padding: 14mm; }
 
 @media print {
     body { background: #fff; }

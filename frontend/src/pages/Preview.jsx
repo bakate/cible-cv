@@ -5,6 +5,7 @@ import { Download, Copy, Loader2, FileText, Mail, Sparkles, ArrowLeft, Trash2, P
 import CVCorporate from "../components/CVCorporate";
 import CVStartup from "../components/CVStartup";
 import LetterTemplate from "../components/LetterTemplate";
+import FullEditor from "../components/FullEditor";
 import { getGeneration, updateGeneration, deleteGeneration } from "../lib/api";
 
 export default function Preview() {
@@ -33,15 +34,6 @@ export default function Preview() {
     try { await updateGeneration(id, { template: tpl }); } catch (e) { /* noop */ }
   };
 
-  const saveField = async (path, value) => {
-    const next = { ...data };
-    const keys = path.split(".");
-    let target = next;
-    for (let i = 0; i < keys.length - 1; i++) target = target[keys[i]];
-    target[keys[keys.length - 1]] = value;
-    setData(next);
-  };
-
   const persistEdits = async () => {
     try {
       await updateGeneration(id, { cv: data.cv, letter: data.letter });
@@ -55,21 +47,59 @@ export default function Preview() {
   const exportPdf = async (which) => {
     setExporting(true);
     try {
-      const html2pdf = (await import("html2pdf.js")).default;
-      const el = which === "cv" ? cvRef.current : letterRef.current;
-      if (!el) throw new Error("Élément introuvable");
-      const filename = which === "cv"
-        ? `CV-${data.cv.full_name || "candidat"}-${data.company}.pdf`
-        : `Lettre-${data.cv.full_name || "candidat"}-${data.company}.pdf`;
-      await html2pdf().set({
-        margin: 0,
-        filename,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      }).from(el).save();
-      toast.success("PDF exporté");
+      const { default: html2canvas } = await import("html2canvas");
+      const { jsPDF } = await import("jspdf");
+      const source = which === "cv" ? cvRef.current : letterRef.current;
+      if (!source) throw new Error("Élément introuvable");
+      // Offscreen clone so we render even when tab is hidden.
+      const clone = source.cloneNode(true);
+      clone.style.display = "block";
+      const holder = document.createElement("div");
+      holder.style.position = "fixed";
+      holder.style.left = "-10000px";
+      holder.style.top = "0";
+      holder.style.width = "210mm";
+      holder.style.background = "#fff";
+      holder.appendChild(clone);
+      document.body.appendChild(holder);
+
+      try {
+        const canvas = await html2canvas(clone, {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          windowWidth: 794,
+          scrollX: 0,
+          scrollY: 0,
+        });
+        const pageWmm = 210;
+        const pageHmm = 297;
+        const imgWmm = pageWmm;
+        const fullImgHmm = (canvas.height * imgWmm) / canvas.width;
+        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+        const imgData = canvas.toDataURL("image/jpeg", 0.95);
+        if (fullImgHmm <= pageHmm + 0.5) {
+          pdf.addImage(imgData, "JPEG", 0, 0, imgWmm, fullImgHmm);
+        } else if (fullImgHmm <= pageHmm * 1.15) {
+          // Slight overflow → squish vertically (anamorphic, barely visible) to fit single page.
+          pdf.addImage(imgData, "JPEG", 0, 0, imgWmm, pageHmm);
+        } else {
+          // Big overflow → uniform scale to fit one page, centered.
+          const scale = pageHmm / fullImgHmm;
+          const finalW = imgWmm * scale;
+          pdf.addImage(imgData, "JPEG", (pageWmm - finalW) / 2, 0, finalW, pageHmm);
+        }
+        const safeName = (data.cv.full_name || "candidat").replace(/\s+/g, "_");
+        const filename = which === "cv"
+          ? `CV-${safeName}-${data.company}.pdf`
+          : `Lettre-${safeName}-${data.company}.pdf`;
+        pdf.save(filename);
+        toast.success("PDF exporté");
+      } finally {
+        document.body.removeChild(holder);
+      }
     } catch (e) {
+      console.error(e);
       toast.error("Export PDF échoué");
     } finally {
       setExporting(false);
@@ -189,7 +219,7 @@ export default function Preview() {
           </div>
 
           {editing && (
-            <EditPanel data={data} onChange={saveField} tab={tab} />
+            <FullEditor data={data} setData={setData} tab={tab} />
           )}
 
           <div className="bg-zinc-100 rounded-lg p-4 border-2 border-black overflow-auto" data-testid="preview-stage">
@@ -206,62 +236,6 @@ export default function Preview() {
           </div>
         </main>
       </div>
-    </div>
-  );
-}
-
-function EditPanel({ data, onChange, tab }) {
-  const cv = data.cv;
-  const letter = data.letter;
-  return (
-    <div className="brut-card-flat p-5 mb-4 space-y-3" data-testid="edit-panel">
-      {tab === "cv" && (
-        <>
-          <div className="grid grid-cols-2 gap-3">
-            <input
-              className="brut-input"
-              value={cv.full_name || ""}
-              onChange={(e) => onChange("cv.full_name", e.target.value)}
-              placeholder="Nom complet"
-              data-testid="edit-name"
-            />
-            <input
-              className="brut-input"
-              value={cv.headline || ""}
-              onChange={(e) => onChange("cv.headline", e.target.value)}
-              placeholder="Titre / Headline"
-              data-testid="edit-headline"
-            />
-          </div>
-          <textarea
-            className="brut-input"
-            rows={4}
-            value={cv.summary || ""}
-            onChange={(e) => onChange("cv.summary", e.target.value)}
-            placeholder="Résumé"
-            data-testid="edit-summary"
-          />
-        </>
-      )}
-      {tab === "letter" && (
-        <>
-          <input
-            className="brut-input"
-            value={letter.subject || ""}
-            onChange={(e) => onChange("letter.subject", e.target.value)}
-            placeholder="Objet"
-            data-testid="edit-letter-subject"
-          />
-          <textarea
-            className="brut-input"
-            rows={10}
-            value={letter.body || ""}
-            onChange={(e) => onChange("letter.body", e.target.value)}
-            placeholder="Corps de la lettre"
-            data-testid="edit-letter-body"
-          />
-        </>
-      )}
     </div>
   );
 }

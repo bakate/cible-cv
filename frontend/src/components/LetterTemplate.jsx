@@ -2,7 +2,7 @@ export default function LetterTemplate({ letter, sender, recipientCompany }) {
   if (!letter) return null;
   const today = new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
   return (
-    <div className="cv-page font-sans" id="letter-render-area" data-testid="letter-render">
+    <div className="cv-page padded font-sans" id="letter-render-area" data-testid="letter-render">
       <div className="grid grid-cols-2 gap-8 mb-8 text-[12.5px] text-zinc-700">
         <div>
           <p className="font-bold text-zinc-900">{sender?.full_name || ""}</p>
