@@ -27,6 +27,11 @@ from docx import Document
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 
+from docx import Document
+from docx.shared import Pt, RGBColor, Cm
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from fastapi.responses import Response
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
@@ -239,6 +244,9 @@ Génère un objet JSON structuré exactement comme suit:
       "website": "string ou null"
     }},
     "summary": "résumé pro 3-4 lignes orienté annonce",
+    "skill_groups": [
+      {{"category": "ex: Frontend / Backend / DevOps / Sécurité / IA / Data / Méthodologies / Outils", "items": ["compétence ou outil concret", "..."]}}
+    ],
     "skills": ["compétence", "..."],
     "languages": [{{"name": "Français", "level": "Natif"}}],
     "experiences": [
@@ -274,6 +282,7 @@ Génère un objet JSON structuré exactement comme suit:
 }}
 
 Le match_score est un entier de 0 à 100 reflétant la correspondance globale.
+"skill_groups" doit être bien rempli : 5 à 8 familles thématiques (ex. Frontend, Backend, DevOps & Cloud, Sécurité, IA, Data, Méthodologies, Outils) avec les compétences/outils du candidat ventilés dedans. La liste "skills" plate reste utile pour les ATS, les deux doivent contenir les mêmes éléments.
 RAPPEL: Reste fidèle au parcours réel du candidat. Sors UNIQUEMENT le JSON.
 """
 
@@ -376,6 +385,236 @@ async def delete_generation(gen_id: str):
     return {"ok": True}
 
 
+# ---- DOCX export ----
+def _accent_rgb(hex_color: str) -> RGBColor:
+    h = (hex_color or "#FF3E1A").lstrip("#")
+    if len(h) != 6:
+        h = "FF3E1A"
+    return RGBColor.from_string(h.upper())
+
+
+def _set_doc_margins(doc: Document) -> None:
+    for section in doc.sections:
+        section.top_margin = Cm(1.6)
+        section.bottom_margin = Cm(1.6)
+        section.left_margin = Cm(1.8)
+        section.right_margin = Cm(1.8)
+
+
+def _section_heading(doc: Document, title: str, accent: RGBColor) -> None:
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(10)
+    p.paragraph_format.space_after = Pt(4)
+    run = p.add_run(title.upper())
+    run.bold = True
+    run.font.size = Pt(11)
+    run.font.color.rgb = accent
+
+
+def build_cv_docx(cv: Dict[str, Any]) -> bytes:
+    accent_hex = ((cv.get("theme") or {}).get("accent")) or "#FF3E1A"
+    accent = _accent_rgb(accent_hex)
+    doc = Document()
+    _set_doc_margins(doc)
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(10.5)
+
+    # Header
+    name_p = doc.add_paragraph()
+    name_p.paragraph_format.space_after = Pt(2)
+    nrun = name_p.add_run(cv.get("full_name", "") or "")
+    nrun.bold = True
+    nrun.font.size = Pt(22)
+
+    if cv.get("headline"):
+        head_p = doc.add_paragraph()
+        head_p.paragraph_format.space_after = Pt(4)
+        hr = head_p.add_run(cv["headline"])
+        hr.bold = True
+        hr.font.size = Pt(12)
+        hr.font.color.rgb = accent
+
+    contact = cv.get("contact") or {}
+    parts = []
+    for k in ("email", "phone", "location", "linkedin", "github", "website"):
+        v = contact.get(k)
+        if v:
+            parts.append(v)
+    if parts:
+        cp = doc.add_paragraph(" · ".join(parts))
+        cp.runs[0].font.size = Pt(9)
+        cp.runs[0].font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+
+    if cv.get("summary"):
+        _section_heading(doc, "Profil", accent)
+        doc.add_paragraph(cv["summary"])
+
+    if cv.get("experiences"):
+        _section_heading(doc, "Expériences professionnelles", accent)
+        for e in cv["experiences"]:
+            p = doc.add_paragraph()
+            p.paragraph_format.space_after = Pt(0)
+            r = p.add_run(e.get("title", "") or "")
+            r.bold = True
+            r.font.size = Pt(11)
+            company = e.get("company") or ""
+            loc = e.get("location") or ""
+            dates = f"{e.get('start', '')} – {e.get('end', '')}"
+            details = f"  ·  {company}"
+            if loc:
+                details += f" — {loc}"
+            details += f"   |   {dates}"
+            sub = p.add_run(details)
+            sub.font.size = Pt(10)
+            sub.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+            for b in (e.get("bullets") or []):
+                bp = doc.add_paragraph(b, style="List Bullet")
+                bp.paragraph_format.space_after = Pt(0)
+
+    if cv.get("education"):
+        _section_heading(doc, "Formation", accent)
+        for ed in cv["education"]:
+            p = doc.add_paragraph()
+            r = p.add_run(ed.get("degree", "") or "")
+            r.bold = True
+            tail = f"  ·  {ed.get('school', '')}"
+            dates = f"{ed.get('start', '')} – {ed.get('end', '')}"
+            if dates.strip(" – "):
+                tail += f"   |   {dates}"
+            sub = p.add_run(tail)
+            sub.font.size = Pt(10)
+            sub.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+            if ed.get("details"):
+                dp = doc.add_paragraph(ed["details"])
+                dp.runs[0].italic = True
+                dp.runs[0].font.size = Pt(10)
+
+    if cv.get("skill_groups"):
+        _section_heading(doc, "Compétences", accent)
+        for g in cv["skill_groups"]:
+            p = doc.add_paragraph()
+            p.paragraph_format.space_after = Pt(2)
+            r = p.add_run(f"{g.get('category', '')} : ")
+            r.bold = True
+            p.add_run(" · ".join(g.get("items") or []))
+    elif cv.get("skills"):
+        _section_heading(doc, "Compétences", accent)
+        doc.add_paragraph(" · ".join(cv["skills"]))
+        if cv.get("tools"):
+            _section_heading(doc, "Outils", accent)
+            doc.add_paragraph(" · ".join(cv["tools"]))
+
+    if cv.get("languages"):
+        _section_heading(doc, "Langues", accent)
+        doc.add_paragraph(
+            " · ".join(
+                f"{l.get('name', '')} ({l.get('level', '')})"
+                for l in cv["languages"]
+                if l.get("name")
+            )
+        )
+
+    if cv.get("certifications"):
+        _section_heading(doc, "Certifications", accent)
+        for cer in cv["certifications"]:
+            line = cer.get("name", "") or ""
+            if cer.get("issuer"):
+                line += f" — {cer['issuer']}"
+            if cer.get("year"):
+                line += f" ({cer['year']})"
+            doc.add_paragraph(line)
+
+    if cv.get("interests"):
+        _section_heading(doc, "Centres d'intérêt", accent)
+        doc.add_paragraph(" · ".join(cv["interests"]))
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def build_letter_docx(letter: Dict[str, Any], sender_cv: Dict[str, Any], company: str) -> bytes:
+    doc = Document()
+    _set_doc_margins(doc)
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(11)
+
+    # Sender block
+    sender_contact = (sender_cv or {}).get("contact") or {}
+    sp = doc.add_paragraph()
+    sname = sp.add_run(sender_cv.get("full_name", "") or "")
+    sname.bold = True
+    sub = []
+    for k in ("email", "phone", "location"):
+        v = sender_contact.get(k)
+        if v:
+            sub.append(v)
+    if sub:
+        sp.add_run("\n" + "\n".join(sub))
+
+    # Recipient + date
+    rp = doc.add_paragraph()
+    rp.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
+    rr = rp.add_run(company or "")
+    rr.bold = True
+    today = datetime.now().strftime("%d/%m/%Y")
+    rp.add_run(f"\n\n{today}")
+
+    if letter.get("subject"):
+        sp = doc.add_paragraph()
+        r = sp.add_run("Objet : ")
+        r.bold = True
+        sp.add_run(letter["subject"])
+
+    if letter.get("recipient"):
+        doc.add_paragraph(letter["recipient"])
+
+    for para in (letter.get("body") or "").split("\n"):
+        doc.add_paragraph(para)
+
+    buf = io.BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def _safe_name(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_\-]+", "_", name or "candidat").strip("_") or "candidat"
+
+
+@api.get("/generations/{gen_id}/export/cv.docx")
+async def export_cv_docx(gen_id: str):
+    doc = await db.generations.find_one({"id": gen_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Génération introuvable")
+    blob = build_cv_docx(doc.get("cv") or {})
+    fn = f"CV-{_safe_name(doc.get('cv', {}).get('full_name', ''))}-{_safe_name(doc.get('company', ''))}.docx"
+    return Response(
+        content=blob,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
+    )
+
+
+@api.get("/generations/{gen_id}/export/letter.docx")
+async def export_letter_docx(gen_id: str):
+    doc = await db.generations.find_one({"id": gen_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Génération introuvable")
+    blob = build_letter_docx(
+        doc.get("letter") or {},
+        doc.get("cv") or {},
+        doc.get("company") or "",
+    )
+    fn = f"Lettre-{_safe_name(doc.get('cv', {}).get('full_name', ''))}-{_safe_name(doc.get('company', ''))}.docx"
+    return Response(
+        content=blob,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
+    )
+
+
 # ---- Base profile ("CV de base") ----
 @api.get("/profile/base")
 async def get_base_profile():
@@ -402,6 +641,30 @@ async def put_base_profile(payload: Dict[str, Any]):
 async def delete_base_profile():
     await db.base_profile.delete_one({"id": "default"})
     return {"ok": True}
+
+
+@api.post("/regroup-skills")
+async def regroup_skills(payload: Dict[str, Any]):
+    skills = payload.get("skills") or []
+    tools = payload.get("tools") or []
+    if not skills and not tools:
+        raise HTTPException(status_code=400, detail="Aucune compétence à regrouper")
+    prompt = (
+        "Voici une liste de compétences et d'outils techniques d'un candidat. Regroupe-les "
+        "en 5 à 8 familles thématiques pertinentes (ex. Frontend, Backend, DevOps & Cloud, "
+        "Sécurité, IA, Data, Méthodologies, Outils). Garde TOUS les éléments — n'en perds "
+        "aucun. Réponds STRICTEMENT en JSON valide:\n\n"
+        '{"skill_groups": [{"category": "string", "items": ["string", ...]}]}'
+        f"\n\nCompétences:\n{json.dumps(skills, ensure_ascii=False)}"
+        f"\n\nOutils:\n{json.dumps(tools, ensure_ascii=False)}"
+    )
+    try:
+        raw = await claude_chat(SYSTEM_PROMPT, prompt)
+        data = _extract_json(raw)
+    except Exception as e:
+        logger.exception("regroup failed")
+        raise HTTPException(status_code=502, detail=f"Regroupement échoué: {e}")
+    return data
 
 
 app.include_router(api)

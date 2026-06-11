@@ -1,4 +1,7 @@
-import { Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Plus, Trash2, Sparkles, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { regroupSkills } from "../lib/api";
 
 const Field = ({ label, children, className = "" }) => (
   <label className={`block ${className}`}>
@@ -62,6 +65,22 @@ export default function FullEditor({ data, setData, tab }) {
   const updCv = (patch) => setData({ ...data, cv: { ...cv, ...patch } });
   const updContact = (patch) => updCv({ contact: { ...c, ...patch } });
   const updLetter = (patch) => setData({ ...data, letter: { ...letter, ...patch } });
+  const [regrouping, setRegrouping] = useState(false);
+
+  const autoRegroup = async () => {
+    setRegrouping(true);
+    try {
+      const res = await regroupSkills({ skills: cv.skills || [], tools: cv.tools || [] });
+      if (res.skill_groups) {
+        updCv({ skill_groups: res.skill_groups });
+        toast.success("Compétences regroupées par famille");
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Échec du regroupement");
+    } finally {
+      setRegrouping(false);
+    }
+  };
 
   if (tab === "letter") {
     return (
@@ -245,9 +264,68 @@ export default function FullEditor({ data, setData, tab }) {
         </div>
       </details>
 
+      <details className="border-2 border-black rounded-md" open>
+        <summary className="cursor-pointer p-3 font-bold bg-zinc-50">Compétences par famille ({(cv.skill_groups || []).length})</summary>
+        <div className="p-3 space-y-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <button
+              type="button"
+              onClick={autoRegroup}
+              disabled={regrouping || ((cv.skills || []).length === 0 && (cv.tools || []).length === 0)}
+              className="brut-btn brut-btn-yellow !py-1.5 !px-3 text-sm"
+              data-testid="auto-regroup-button"
+            >
+              {regrouping ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+              Regrouper auto (IA)
+            </button>
+            <span className="text-xs text-zinc-500">Classe automatiquement tes compétences + outils par famille via Claude.</span>
+          </div>
+
+          {(cv.skill_groups || []).map((g, i) => (
+            <div key={i} className="border border-zinc-300 rounded-md p-3 space-y-2 bg-white" data-testid={`edit-group-${i}`}>
+              <div className="flex items-center justify-between gap-2">
+                <TxtInput
+                  value={g.category || ""}
+                  onChange={(ev) => {
+                    const next = [...cv.skill_groups]; next[i] = { ...g, category: ev.target.value }; updCv({ skill_groups: next });
+                  }}
+                  placeholder="Nom de la famille (ex: Frontend)"
+                  className="!text-sm font-bold"
+                />
+                <button
+                  type="button"
+                  onClick={() => updCv({ skill_groups: cv.skill_groups.filter((_, j) => j !== i) })}
+                  className="text-red-600 hover:bg-red-50 rounded p-1 shrink-0"
+                  data-testid={`remove-group-${i}`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+              <ListEditor
+                items={g.items || []}
+                onChange={(items) => {
+                  const next = [...cv.skill_groups]; next[i] = { ...g, items }; updCv({ skill_groups: next });
+                }}
+                placeholder="Une compétence ou un outil"
+                testId={`group-${i}-items`}
+              />
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => updCv({ skill_groups: [...(cv.skill_groups || []), { category: "", items: [] }] })}
+            className="brut-btn brut-btn-ghost !py-1.5 !px-3 text-sm"
+            data-testid="add-group"
+          >
+            <Plus className="w-3 h-3" /> Ajouter une famille
+          </button>
+        </div>
+      </details>
+
       <details className="border-2 border-black rounded-md">
-        <summary className="cursor-pointer p-3 font-bold bg-zinc-50">Compétences & outils</summary>
+        <summary className="cursor-pointer p-3 font-bold bg-zinc-50">Liste à plat (skills / outils / intérêts)</summary>
         <div className="p-3 space-y-4">
+          <p className="text-xs text-zinc-500">Liste plate utilisée pour les ATS ou comme fallback si les familles sont vides.</p>
           <Field label="Compétences">
             <ListEditor
               items={cv.skills || []}

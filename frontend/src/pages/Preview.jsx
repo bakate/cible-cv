@@ -1,12 +1,12 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Download, Copy, Loader2, FileText, Mail, Sparkles, ArrowLeft, Trash2, Pencil, Pin } from "lucide-react";
+import { Download, Copy, Loader2, FileText, Mail, Sparkles, ArrowLeft, Trash2, Pencil, Pin, Target, FileDown } from "lucide-react";
 import CVCorporate from "../components/CVCorporate";
 import CVStartup from "../components/CVStartup";
 import LetterTemplate from "../components/LetterTemplate";
 import FullEditor from "../components/FullEditor";
-import { getGeneration, updateGeneration, deleteGeneration, saveBaseProfile } from "../lib/api";
+import { getGeneration, updateGeneration, deleteGeneration, saveBaseProfile, exportCvDocxUrl, exportLetterDocxUrl } from "../lib/api";
 
 export default function Preview() {
   const { id } = useParams();
@@ -14,12 +14,24 @@ export default function Preview() {
   const [tab, setTab] = useState("cv");
   const [editing, setEditing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [highlight, setHighlight] = useState(false);
   const cvRef = useRef(null);
   const letterRef = useRef(null);
 
   useEffect(() => {
     getGeneration(id).then(setData).catch((e) => toast.error(e?.response?.data?.detail || "Erreur"));
   }, [id]);
+
+  const adp = data?.adaptations || {};
+  const matchTokens = useMemo(() => {
+    const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const tokenize = (s) => norm(s).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+    const set = new Set();
+    [...(adp.keywords_matched || []), ...(adp.keywords_added || [])].forEach((k) => {
+      tokenize(k).forEach((t) => set.add(t));
+    });
+    return set;
+  }, [adp.keywords_matched, adp.keywords_added]);
 
   if (!data) {
     return (
@@ -155,9 +167,20 @@ export default function Preview() {
   };
 
   const cv = data.cv || {};
-  const adp = data.adaptations || {};
   const matchScore = adp.match_score || 0;
   const accent = cv.theme?.accent || "#FF3E1A";
+
+  const downloadDocx = (kind) => {
+    const url = kind === "cv" ? exportCvDocxUrl(id) : exportLetterDocxUrl(id);
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast.success("DOCX en cours de téléchargement");
+  };
 
   return (
     <div className="max-w-[1500px] mx-auto px-6 sm:px-8 lg:px-12 py-8 no-print">
@@ -244,6 +267,16 @@ export default function Preview() {
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             <button onClick={() => setTab("cv")} data-testid="tab-cv" className={`brut-btn ${tab === "cv" ? "" : "brut-btn-ghost"}`}><FileText className="w-4 h-4" /> CV</button>
             <button onClick={() => setTab("letter")} data-testid="tab-letter" className={`brut-btn ${tab === "letter" ? "" : "brut-btn-ghost"}`}><Mail className="w-4 h-4" /> Lettre</button>
+            {tab === "cv" && matchTokens.size > 0 && (
+              <button
+                onClick={() => setHighlight((v) => !v)}
+                className={`brut-btn ${highlight ? "brut-btn-yellow" : "brut-btn-ghost"}`}
+                data-testid="toggle-highlight-button"
+                title="Surligner les compétences qui matchent les mots-clés de l'offre"
+              >
+                <Target className="w-4 h-4" /> {highlight ? "Surlignage actif" : "Surligner matchs"}
+              </button>
+            )}
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => exportPdf(tab)}
@@ -252,7 +285,15 @@ export default function Preview() {
                 data-testid="export-pdf-button"
               >
                 {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                Exporter PDF
+                PDF
+              </button>
+              <button
+                onClick={() => downloadDocx(tab)}
+                className="brut-btn brut-btn-ghost"
+                data-testid="export-docx-button"
+                title="Exporter en Word (.docx) — format ATS-friendly et éditable"
+              >
+                <FileDown className="w-4 h-4" /> DOCX
               </button>
               {tab === "letter" && (
                 <button onClick={copyLetterText} className="brut-btn brut-btn-ghost" data-testid="copy-letter-button">
@@ -270,8 +311,8 @@ export default function Preview() {
             <div className="mx-auto" style={{ width: "210mm" }}>
               <div ref={cvRef} style={{ display: tab === "cv" ? "block" : "none" }}>
                 {data.template === "startup"
-                  ? <CVStartup cv={cv} photo={data.photo_data_url} accent={accent} />
-                  : <CVCorporate cv={cv} photo={data.photo_data_url} accent={accent} />}
+                  ? <CVStartup cv={cv} photo={data.photo_data_url} accent={accent} highlight={highlight} matchTokens={matchTokens} />
+                  : <CVCorporate cv={cv} photo={data.photo_data_url} accent={accent} highlight={highlight} matchTokens={matchTokens} />}
               </div>
               <div ref={letterRef} style={{ display: tab === "letter" ? "block" : "none" }}>
                 <LetterTemplate letter={data.letter} sender={cv} recipientCompany={data.company} />

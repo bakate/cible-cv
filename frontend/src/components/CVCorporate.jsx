@@ -21,7 +21,15 @@ const linkify = (kind, value) => {
   return value.startsWith("http") ? value : `https://${value}`;
 };
 
-export default function CVCorporate({ cv, photo, accent }) {
+const normalize = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const tokenize = (s) => normalize(s).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+const chipMatches = (text, set) => {
+  if (!set || set.size === 0) return false;
+  const ts = tokenize(text);
+  return ts.some((t) => set.has(t));
+};
+
+export default function CVCorporate({ cv, photo, accent, highlight = false, matchTokens }) {
   if (!cv) return null;
   const c = cv.contact || {};
   const contactRows = [
@@ -112,22 +120,48 @@ export default function CVCorporate({ cv, photo, accent }) {
         </div>
 
         <div className="col-span-1">
-          {(cv.skills || []).length > 0 && (
+          {(cv.skill_groups && cv.skill_groups.length > 0) ? (
+            <Section title="Compétences">
+              {cv.skill_groups.map((g, i) => (
+                <div key={i} className="mb-3">
+                  <div className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-zinc-600 mb-1.5">{g.category}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {(g.items || []).map((s, j) => {
+                      const m = highlight && chipMatches(s, matchTokens);
+                      return (
+                        <span
+                          key={j}
+                          className={`inline-block text-[10px] leading-[18px] h-[18px] px-2 rounded align-middle ${m ? "text-white font-bold" : "bg-zinc-100 border border-zinc-300"}`}
+                          style={m ? { background: "var(--cv-accent)", border: "1px solid var(--cv-accent)" } : undefined}
+                        >
+                          {s}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </Section>
+          ) : (cv.skills || []).length > 0 && (
             <Section title="Compétences">
               <div className="flex flex-wrap gap-1.5">
-                {cv.skills.map((s, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center text-[10.5px] leading-none bg-zinc-100 border border-zinc-300 px-2.5 py-[5px] rounded"
-                  >
-                    {s}
-                  </span>
-                ))}
+                {cv.skills.map((s, i) => {
+                  const m = highlight && chipMatches(s, matchTokens);
+                  return (
+                    <span
+                      key={i}
+                      className={`inline-block text-[10px] leading-[18px] h-[18px] px-2 rounded align-middle ${m ? "text-white font-bold" : "bg-zinc-100 border border-zinc-300"}`}
+                      style={m ? { background: "var(--cv-accent)", border: "1px solid var(--cv-accent)" } : undefined}
+                    >
+                      {s}
+                    </span>
+                  );
+                })}
               </div>
             </Section>
           )}
 
-          {(cv.tools || []).length > 0 && (
+          {!(cv.skill_groups && cv.skill_groups.length > 0) && (cv.tools || []).length > 0 && (
             <Section title="Outils">
               <p className="text-[11px] leading-relaxed text-zinc-700">{cv.tools.join(" · ")}</p>
             </Section>

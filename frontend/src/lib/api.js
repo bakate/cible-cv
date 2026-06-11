@@ -47,3 +47,8 @@ export const deleteGeneration = async (id) => {
 export const getBaseProfile = async () => (await api.get("/profile/base")).data;
 export const saveBaseProfile = async (payload) => (await api.put("/profile/base", payload)).data;
 export const deleteBaseProfile = async () => (await api.delete("/profile/base")).data;
+
+export const regroupSkills = async (payload) => (await api.post("/regroup-skills", payload)).data;
+
+export const exportCvDocxUrl = (id) => `${API}/generations/${id}/export/cv.docx`;
+export const exportLetterDocxUrl = (id) => `${API}/generations/${id}/export/letter.docx`;

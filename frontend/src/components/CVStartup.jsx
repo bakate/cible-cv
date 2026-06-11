@@ -19,7 +19,15 @@ const LinkLine = ({ icon, href, text }) => (
   </p>
 );
 
-export default function CVStartup({ cv, photo, accent }) {
+const normalize = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const tokenize = (s) => normalize(s).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
+const chipMatches = (text, set) => {
+  if (!set || set.size === 0) return false;
+  const ts = tokenize(text);
+  return ts.some((t) => set.has(t));
+};
+
+export default function CVStartup({ cv, photo, accent, highlight = false, matchTokens }) {
   if (!cv) return null;
   const c = cv.contact || {};
   return (
@@ -47,23 +55,50 @@ export default function CVStartup({ cv, photo, accent }) {
             {c.website && <LinkLine icon="⌘" href={linkify("url", c.website)} text={c.website} />}
           </div>
 
-          {(cv.skills || []).length > 0 && (
+          {(cv.skill_groups && cv.skill_groups.length > 0) ? (
+            <div className="mb-5">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--cv-accent)] mb-2">Stack</h3>
+              {cv.skill_groups.map((g, i) => (
+                <div key={i} className="mb-2.5">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-zinc-400 mb-1">{g.category}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {(g.items || []).map((s, j) => {
+                      const m = highlight && chipMatches(s, matchTokens);
+                      return (
+                        <span
+                          key={j}
+                          className={`inline-block text-[10px] leading-[18px] h-[18px] px-2 rounded align-middle ${m ? "text-white font-bold" : "bg-white/10 border border-white/20"}`}
+                          style={m ? { background: "var(--cv-accent)", border: "1px solid var(--cv-accent)" } : undefined}
+                        >
+                          {s}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (cv.skills || []).length > 0 && (
             <div className="mb-5">
               <h3 className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--cv-accent)] mb-2">Stack</h3>
               <div className="flex flex-wrap gap-1.5">
-                {cv.skills.map((s, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center text-[10.5px] leading-none bg-white/10 border border-white/20 px-2.5 py-[5px] rounded"
-                  >
-                    {s}
-                  </span>
-                ))}
+                {cv.skills.map((s, i) => {
+                  const m = highlight && chipMatches(s, matchTokens);
+                  return (
+                    <span
+                      key={i}
+                      className={`inline-block text-[10px] leading-[18px] h-[18px] px-2 rounded align-middle ${m ? "text-white font-bold" : "bg-white/10 border border-white/20"}`}
+                      style={m ? { background: "var(--cv-accent)", border: "1px solid var(--cv-accent)" } : undefined}
+                    >
+                      {s}
+                    </span>
+                  );
+                })}
               </div>
             </div>
           )}
 
-          {(cv.tools || []).length > 0 && (
+          {!(cv.skill_groups && cv.skill_groups.length > 0) && (cv.tools || []).length > 0 && (
             <div className="mb-5">
               <h3 className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--cv-accent)] mb-2">Outils</h3>
               <p className="text-[11px] leading-snug text-zinc-300">{cv.tools.join(" · ")}</p>
