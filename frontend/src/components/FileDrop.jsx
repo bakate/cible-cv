@@ -6,7 +6,11 @@ export default function FileDrop({ onFile, accept = ".pdf,.docx,.txt", testId, l
   const [name, setName] = useState("");
 
   const handleFile = useCallback((file) => {
-    if (!file) return;
+    if (!file) {
+      setName("");
+      onFile(null);
+      return;
+    }
     setName(file.name);
     onFile(file);
   }, [onFile]);

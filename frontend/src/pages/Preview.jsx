@@ -19,11 +19,15 @@ export default function Preview() {
   const letterRef = useRef(null);
 
   useEffect(() => {
-    getGeneration(id).then(setData).catch((e) => toast.error(e?.response?.data?.detail || "Erreur"));
+    let cancelled = false;
+    getGeneration(id)
+      .then((d) => { if (!cancelled) setData(d); })
+      .catch((e) => toast.error(e?.response?.data?.detail || "Erreur"));
+    return () => { cancelled = true; };
   }, [id]);
 
-  const adp = data?.adaptations || {};
   const matchTokens = useMemo(() => {
+    const adp = data?.adaptations || {};
     const norm = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const tokenize = (s) => norm(s).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
     const set = new Set();
@@ -31,7 +35,7 @@ export default function Preview() {
       tokenize(k).forEach((t) => set.add(t));
     });
     return set;
-  }, [adp.keywords_matched, adp.keywords_added]);
+  }, [data?.adaptations]);
 
   if (!data) {
     return (
@@ -43,7 +47,11 @@ export default function Preview() {
 
   const setTemplate = async (tpl) => {
     setData({ ...data, template: tpl });
-    try { await updateGeneration(id, { template: tpl }); } catch (e) { /* noop */ }
+    try {
+      await updateGeneration(id, { template: tpl });
+    } catch (e) {
+      console.warn("Template update failed", e);
+    }
   };
 
   const persistEdits = async () => {
@@ -167,6 +175,7 @@ export default function Preview() {
   };
 
   const cv = data.cv || {};
+  const adp = data.adaptations || {};
   const matchScore = adp.match_score || 0;
   const accent = cv.theme?.accent || "#FF3E1A";
 

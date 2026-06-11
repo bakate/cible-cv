@@ -37,12 +37,15 @@ export default function Wizard() {
   const [baseProfile, setBaseProfile] = useState(null);
 
   useEffect(() => {
-    getBaseProfile().then((d) => {
-      if (d?.exists) {
+    let cancelled = false;
+    getBaseProfile()
+      .then((d) => {
+        if (cancelled || !d?.exists) return;
         setBaseProfile(d);
         if (d.photo_data_url) setPhoto(d.photo_data_url);
-      }
-    }).catch(() => {});
+      })
+      .catch((e) => console.warn("Base profile fetch failed", e));
+    return () => { cancelled = true; };
   }, []);
 
   const useBaseProfile = () => {

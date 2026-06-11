@@ -27,7 +27,6 @@ from docx import Document
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 
-from docx import Document
 from docx.shared import Pt, RGBColor, Cm
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from fastapi.responses import Response
@@ -167,6 +166,7 @@ async def root():
 async def parse_pdf(file: UploadFile = File(...)):
     content = await file.read()
     name = (file.filename or "").lower()
+    text = ""
     try:
         if name.endswith(".pdf"):
             text = extract_pdf_text(content)
@@ -191,6 +191,7 @@ async def parse_url(payload: Dict[str, str]):
     url = (payload.get("url") or "").strip()
     if not url:
         raise HTTPException(status_code=400, detail="URL requise")
+    text = ""
     try:
         text = fetch_url_text(url)
     except Exception as e:
@@ -297,6 +298,7 @@ async def generate(req: GenerationCreate):
         profile=req.profile_text[:14000],
         job=req.job_text[:8000],
     )
+    data: Dict[str, Any] = {}
     try:
         raw = await claude_chat(SYSTEM_PROMPT, prompt)
         data = _extract_json(raw)
@@ -411,16 +413,10 @@ def _section_heading(doc: Document, title: str, accent: RGBColor) -> None:
     run.font.color.rgb = accent
 
 
-def build_cv_docx(cv: Dict[str, Any]) -> bytes:
-    accent_hex = ((cv.get("theme") or {}).get("accent")) or "#FF3E1A"
-    accent = _accent_rgb(accent_hex)
-    doc = Document()
-    _set_doc_margins(doc)
-    style = doc.styles["Normal"]
-    style.font.name = "Calibri"
-    style.font.size = Pt(10.5)
+_MUTED = RGBColor(0x55, 0x55, 0x55)
 
-    # Header
+
+def _docx_header(doc: Document, cv: Dict[str, Any], accent: RGBColor) -> None:
     name_p = doc.add_paragraph()
     name_p.paragraph_format.space_after = Pt(2)
     nrun = name_p.add_run(cv.get("full_name", "") or "")
@@ -436,60 +432,58 @@ def build_cv_docx(cv: Dict[str, Any]) -> bytes:
         hr.font.color.rgb = accent
 
     contact = cv.get("contact") or {}
-    parts = []
-    for k in ("email", "phone", "location", "linkedin", "github", "website"):
-        v = contact.get(k)
-        if v:
-            parts.append(v)
+    parts = [contact[k] for k in ("email", "phone", "location", "linkedin", "github", "website") if contact.get(k)]
     if parts:
         cp = doc.add_paragraph(" · ".join(parts))
         cp.runs[0].font.size = Pt(9)
-        cp.runs[0].font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+        cp.runs[0].font.color.rgb = _MUTED
 
-    if cv.get("summary"):
-        _section_heading(doc, "Profil", accent)
-        doc.add_paragraph(cv["summary"])
 
-    if cv.get("experiences"):
-        _section_heading(doc, "Expériences professionnelles", accent)
-        for e in cv["experiences"]:
-            p = doc.add_paragraph()
-            p.paragraph_format.space_after = Pt(0)
-            r = p.add_run(e.get("title", "") or "")
-            r.bold = True
-            r.font.size = Pt(11)
-            company = e.get("company") or ""
-            loc = e.get("location") or ""
-            dates = f"{e.get('start', '')} – {e.get('end', '')}"
-            details = f"  ·  {company}"
-            if loc:
-                details += f" — {loc}"
-            details += f"   |   {dates}"
-            sub = p.add_run(details)
-            sub.font.size = Pt(10)
-            sub.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
-            for b in (e.get("bullets") or []):
-                bp = doc.add_paragraph(b, style="List Bullet")
-                bp.paragraph_format.space_after = Pt(0)
+def _docx_experiences(doc: Document, experiences: List[Dict[str, Any]], accent: RGBColor) -> None:
+    if not experiences:
+        return
+    _section_heading(doc, "Expériences professionnelles", accent)
+    for e in experiences:
+        p = doc.add_paragraph()
+        p.paragraph_format.space_after = Pt(0)
+        r = p.add_run(e.get("title", "") or "")
+        r.bold = True
+        r.font.size = Pt(11)
+        loc = e.get("location") or ""
+        details = f"  ·  {e.get('company') or ''}"
+        if loc:
+            details += f" — {loc}"
+        details += f"   |   {e.get('start', '')} – {e.get('end', '')}"
+        sub = p.add_run(details)
+        sub.font.size = Pt(10)
+        sub.font.color.rgb = _MUTED
+        for b in (e.get("bullets") or []):
+            bp = doc.add_paragraph(b, style="List Bullet")
+            bp.paragraph_format.space_after = Pt(0)
 
-    if cv.get("education"):
-        _section_heading(doc, "Formation", accent)
-        for ed in cv["education"]:
-            p = doc.add_paragraph()
-            r = p.add_run(ed.get("degree", "") or "")
-            r.bold = True
-            tail = f"  ·  {ed.get('school', '')}"
-            dates = f"{ed.get('start', '')} – {ed.get('end', '')}"
-            if dates.strip(" – "):
-                tail += f"   |   {dates}"
-            sub = p.add_run(tail)
-            sub.font.size = Pt(10)
-            sub.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
-            if ed.get("details"):
-                dp = doc.add_paragraph(ed["details"])
-                dp.runs[0].italic = True
-                dp.runs[0].font.size = Pt(10)
 
+def _docx_education(doc: Document, education: List[Dict[str, Any]], accent: RGBColor) -> None:
+    if not education:
+        return
+    _section_heading(doc, "Formation", accent)
+    for ed in education:
+        p = doc.add_paragraph()
+        r = p.add_run(ed.get("degree", "") or "")
+        r.bold = True
+        tail = f"  ·  {ed.get('school', '')}"
+        dates = f"{ed.get('start', '')} – {ed.get('end', '')}"
+        if dates.strip(" – "):
+            tail += f"   |   {dates}"
+        sub = p.add_run(tail)
+        sub.font.size = Pt(10)
+        sub.font.color.rgb = _MUTED
+        if ed.get("details"):
+            dp = doc.add_paragraph(ed["details"])
+            dp.runs[0].italic = True
+            dp.runs[0].font.size = Pt(10)
+
+
+def _docx_skills(doc: Document, cv: Dict[str, Any], accent: RGBColor) -> None:
     if cv.get("skill_groups"):
         _section_heading(doc, "Compétences", accent)
         for g in cv["skill_groups"]:
@@ -498,23 +492,25 @@ def build_cv_docx(cv: Dict[str, Any]) -> bytes:
             r = p.add_run(f"{g.get('category', '')} : ")
             r.bold = True
             p.add_run(" · ".join(g.get("items") or []))
-    elif cv.get("skills"):
+        return
+    if cv.get("skills"):
         _section_heading(doc, "Compétences", accent)
         doc.add_paragraph(" · ".join(cv["skills"]))
-        if cv.get("tools"):
-            _section_heading(doc, "Outils", accent)
-            doc.add_paragraph(" · ".join(cv["tools"]))
+    if cv.get("tools"):
+        _section_heading(doc, "Outils", accent)
+        doc.add_paragraph(" · ".join(cv["tools"]))
 
+
+def _docx_extras(doc: Document, cv: Dict[str, Any], accent: RGBColor) -> None:
     if cv.get("languages"):
         _section_heading(doc, "Langues", accent)
         doc.add_paragraph(
             " · ".join(
-                f"{l.get('name', '')} ({l.get('level', '')})"
-                for l in cv["languages"]
-                if l.get("name")
+                f"{lang.get('name', '')} ({lang.get('level', '')})"
+                for lang in cv["languages"]
+                if lang.get("name")
             )
         )
-
     if cv.get("certifications"):
         _section_heading(doc, "Certifications", accent)
         for cer in cv["certifications"]:
@@ -524,10 +520,30 @@ def build_cv_docx(cv: Dict[str, Any]) -> bytes:
             if cer.get("year"):
                 line += f" ({cer['year']})"
             doc.add_paragraph(line)
-
     if cv.get("interests"):
         _section_heading(doc, "Centres d'intérêt", accent)
         doc.add_paragraph(" · ".join(cv["interests"]))
+
+
+def build_cv_docx(cv: Dict[str, Any]) -> bytes:
+    accent_hex = ((cv.get("theme") or {}).get("accent")) or "#FF3E1A"
+    accent = _accent_rgb(accent_hex)
+    doc = Document()
+    _set_doc_margins(doc)
+    style = doc.styles["Normal"]
+    style.font.name = "Calibri"
+    style.font.size = Pt(10.5)
+
+    _docx_header(doc, cv, accent)
+
+    if cv.get("summary"):
+        _section_heading(doc, "Profil", accent)
+        doc.add_paragraph(cv["summary"])
+
+    _docx_experiences(doc, cv.get("experiences") or [], accent)
+    _docx_education(doc, cv.get("education") or [], accent)
+    _docx_skills(doc, cv, accent)
+    _docx_extras(doc, cv, accent)
 
     buf = io.BytesIO()
     doc.save(buf)
@@ -658,6 +674,7 @@ async def regroup_skills(payload: Dict[str, Any]):
         f"\n\nCompétences:\n{json.dumps(skills, ensure_ascii=False)}"
         f"\n\nOutils:\n{json.dumps(tools, ensure_ascii=False)}"
     )
+    data: Dict[str, Any] = {}
     try:
         raw = await claude_chat(SYSTEM_PROMPT, prompt)
         data = _extract_json(raw)

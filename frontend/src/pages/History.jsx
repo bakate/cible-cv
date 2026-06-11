@@ -6,7 +6,13 @@ import { listGenerations } from "../lib/api";
 
 export default function History() {
   const [items, setItems] = useState(null);
-  useEffect(() => { listGenerations().then(setItems).catch(() => setItems([])); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    listGenerations()
+      .then((d) => { if (!cancelled) setItems(d); })
+      .catch(() => { if (!cancelled) setItems([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12 py-10">

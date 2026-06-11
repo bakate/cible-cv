@@ -1,3 +1,5 @@
+import SkillChip, { chipMatches } from "./SkillChip";
+
 const Section = ({ title, children }) => (
   <section className="mb-5">
     <h3 className="text-[11px] font-black uppercase tracking-[0.22em] text-zinc-500 mb-2 border-b border-zinc-300 pb-1.5">
@@ -19,14 +21,6 @@ const linkify = (kind, value) => {
   if (kind === "email") return `mailto:${value}`;
   if (kind === "phone") return `tel:${value.replace(/[^0-9+]/g, "")}`;
   return value.startsWith("http") ? value : `https://${value}`;
-};
-
-const normalize = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-const tokenize = (s) => normalize(s).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
-const chipMatches = (text, set) => {
-  if (!set || set.size === 0) return false;
-  const ts = tokenize(text);
-  return ts.some((t) => set.has(t));
 };
 
 export default function CVCorporate({ cv, photo, accent, highlight = false, matchTokens }) {
@@ -126,18 +120,9 @@ export default function CVCorporate({ cv, photo, accent, highlight = false, matc
                 <div key={i} className="mb-3">
                   <div className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-zinc-600 mb-1.5">{g.category}</div>
                   <div className="flex flex-wrap gap-1">
-                    {(g.items || []).map((s, j) => {
-                      const m = highlight && chipMatches(s, matchTokens);
-                      return (
-                        <span
-                          key={j}
-                          className={`inline-block text-[10px] leading-[18px] h-[18px] px-2 rounded align-middle ${m ? "text-white font-bold" : "bg-zinc-100 border border-zinc-300"}`}
-                          style={m ? { background: "var(--cv-accent)", border: "1px solid var(--cv-accent)" } : undefined}
-                        >
-                          {s}
-                        </span>
-                      );
-                    })}
+                    {(g.items || []).map((s, j) => (
+                      <SkillChip key={`${s}-${j}`} text={s} matched={highlight && chipMatches(s, matchTokens)} />
+                    ))}
                   </div>
                 </div>
               ))}
@@ -145,18 +130,9 @@ export default function CVCorporate({ cv, photo, accent, highlight = false, matc
           ) : (cv.skills || []).length > 0 && (
             <Section title="Compétences">
               <div className="flex flex-wrap gap-1.5">
-                {cv.skills.map((s, i) => {
-                  const m = highlight && chipMatches(s, matchTokens);
-                  return (
-                    <span
-                      key={i}
-                      className={`inline-block text-[10px] leading-[18px] h-[18px] px-2 rounded align-middle ${m ? "text-white font-bold" : "bg-zinc-100 border border-zinc-300"}`}
-                      style={m ? { background: "var(--cv-accent)", border: "1px solid var(--cv-accent)" } : undefined}
-                    >
-                      {s}
-                    </span>
-                  );
-                })}
+                {cv.skills.map((s, i) => (
+                  <SkillChip key={`${s}-${i}`} text={s} matched={highlight && chipMatches(s, matchTokens)} />
+                ))}
               </div>
             </Section>
           )}

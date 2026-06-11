@@ -1,3 +1,5 @@
+import SkillChip, { chipMatches } from "./SkillChip";
+
 const Bullet = ({ children }) => (
   <li className="flex gap-2 text-[12px] leading-snug mb-1">
     <span className="text-[color:var(--cv-accent)] font-bold leading-[1.1] mt-[1px]">›</span>
@@ -18,14 +20,6 @@ const LinkLine = ({ icon, href, text }) => (
     {href ? <a href={href} data-pdf-link={href}>{text}</a> : text}
   </p>
 );
-
-const normalize = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-const tokenize = (s) => normalize(s).split(/[^a-z0-9]+/).filter((t) => t.length >= 3);
-const chipMatches = (text, set) => {
-  if (!set || set.size === 0) return false;
-  const ts = tokenize(text);
-  return ts.some((t) => set.has(t));
-};
 
 export default function CVStartup({ cv, photo, accent, highlight = false, matchTokens }) {
   if (!cv) return null;
@@ -62,18 +56,14 @@ export default function CVStartup({ cv, photo, accent, highlight = false, matchT
                 <div key={i} className="mb-2.5">
                   <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-zinc-400 mb-1">{g.category}</div>
                   <div className="flex flex-wrap gap-1">
-                    {(g.items || []).map((s, j) => {
-                      const m = highlight && chipMatches(s, matchTokens);
-                      return (
-                        <span
-                          key={j}
-                          className={`inline-block text-[10px] leading-[18px] h-[18px] px-2 rounded align-middle ${m ? "text-white font-bold" : "bg-white/10 border border-white/20"}`}
-                          style={m ? { background: "var(--cv-accent)", border: "1px solid var(--cv-accent)" } : undefined}
-                        >
-                          {s}
-                        </span>
-                      );
-                    })}
+                    {(g.items || []).map((s, j) => (
+                      <SkillChip
+                        key={`${s}-${j}`}
+                        text={s}
+                        matched={highlight && chipMatches(s, matchTokens)}
+                        theme="dark"
+                      />
+                    ))}
                   </div>
                 </div>
               ))}
@@ -82,18 +72,14 @@ export default function CVStartup({ cv, photo, accent, highlight = false, matchT
             <div className="mb-5">
               <h3 className="text-[10px] font-black uppercase tracking-[0.22em] text-[color:var(--cv-accent)] mb-2">Stack</h3>
               <div className="flex flex-wrap gap-1.5">
-                {cv.skills.map((s, i) => {
-                  const m = highlight && chipMatches(s, matchTokens);
-                  return (
-                    <span
-                      key={i}
-                      className={`inline-block text-[10px] leading-[18px] h-[18px] px-2 rounded align-middle ${m ? "text-white font-bold" : "bg-white/10 border border-white/20"}`}
-                      style={m ? { background: "var(--cv-accent)", border: "1px solid var(--cv-accent)" } : undefined}
-                    >
-                      {s}
-                    </span>
-                  );
-                })}
+                {cv.skills.map((s, i) => (
+                  <SkillChip
+                    key={`${s}-${i}`}
+                    text={s}
+                    matched={highlight && chipMatches(s, matchTokens)}
+                    theme="dark"
+                  />
+                ))}
               </div>
             </div>
           )}

@@ -3,6 +3,12 @@ import { Plus, Trash2, Sparkles, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { regroupSkills } from "../lib/api";
 
+const newUid = () => (typeof crypto !== "undefined" && crypto.randomUUID
+  ? crypto.randomUUID()
+  : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+const keyFor = (item, fallback) => item?._uid || `${fallback}`;
+
 const Field = ({ label, children, className = "" }) => (
   <label className={`block ${className}`}>
     <span className="block text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500 mb-1">{label}</span>
@@ -166,7 +172,7 @@ export default function FullEditor({ data, setData, tab }) {
         <summary className="cursor-pointer p-3 font-bold bg-zinc-50">Expériences ({(cv.experiences || []).length})</summary>
         <div className="p-3 space-y-4">
           {(cv.experiences || []).map((e, i) => (
-            <div key={i} className="border border-zinc-300 rounded-md p-3 space-y-2 bg-white" data-testid={`edit-exp-${i}`}>
+            <div key={keyFor(e, `exp-${i}`)} className="border border-zinc-300 rounded-md p-3 space-y-2 bg-white" data-testid={`edit-exp-${i}`}>
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-zinc-500">Expérience #{i + 1}</span>
                 <button
@@ -211,7 +217,7 @@ export default function FullEditor({ data, setData, tab }) {
           ))}
           <button
             type="button"
-            onClick={() => updCv({ experiences: [...(cv.experiences || []), { title: "", company: "", location: "", start: "", end: "", bullets: [] }] })}
+            onClick={() => updCv({ experiences: [...(cv.experiences || []), { _uid: newUid(), title: "", company: "", location: "", start: "", end: "", bullets: [] }] })}
             className="brut-btn brut-btn-ghost !py-1.5 !px-3 text-sm"
             data-testid="add-experience"
           >
@@ -224,7 +230,7 @@ export default function FullEditor({ data, setData, tab }) {
         <summary className="cursor-pointer p-3 font-bold bg-zinc-50">Formation ({(cv.education || []).length})</summary>
         <div className="p-3 space-y-3">
           {(cv.education || []).map((e, i) => (
-            <div key={i} className="border border-zinc-300 rounded-md p-3 space-y-2 bg-white" data-testid={`edit-edu-${i}`}>
+            <div key={keyFor(e, `edu-${i}`)} className="border border-zinc-300 rounded-md p-3 space-y-2 bg-white" data-testid={`edit-edu-${i}`}>
               <div className="flex justify-end">
                 <button
                   type="button"
@@ -255,7 +261,7 @@ export default function FullEditor({ data, setData, tab }) {
           ))}
           <button
             type="button"
-            onClick={() => updCv({ education: [...(cv.education || []), { degree: "", school: "", start: "", end: "", details: "" }] })}
+            onClick={() => updCv({ education: [...(cv.education || []), { _uid: newUid(), degree: "", school: "", start: "", end: "", details: "" }] })}
             className="brut-btn brut-btn-ghost !py-1.5 !px-3 text-sm"
             data-testid="add-education"
           >
@@ -282,7 +288,7 @@ export default function FullEditor({ data, setData, tab }) {
           </div>
 
           {(cv.skill_groups || []).map((g, i) => (
-            <div key={i} className="border border-zinc-300 rounded-md p-3 space-y-2 bg-white" data-testid={`edit-group-${i}`}>
+            <div key={keyFor(g, `grp-${i}`)} className="border border-zinc-300 rounded-md p-3 space-y-2 bg-white" data-testid={`edit-group-${i}`}>
               <div className="flex items-center justify-between gap-2">
                 <TxtInput
                   value={g.category || ""}
@@ -313,7 +319,7 @@ export default function FullEditor({ data, setData, tab }) {
           ))}
           <button
             type="button"
-            onClick={() => updCv({ skill_groups: [...(cv.skill_groups || []), { category: "", items: [] }] })}
+            onClick={() => updCv({ skill_groups: [...(cv.skill_groups || []), { _uid: newUid(), category: "", items: [] }] })}
             className="brut-btn brut-btn-ghost !py-1.5 !px-3 text-sm"
             data-testid="add-group"
           >
@@ -357,7 +363,7 @@ export default function FullEditor({ data, setData, tab }) {
         <summary className="cursor-pointer p-3 font-bold bg-zinc-50">Langues ({(cv.languages || []).length})</summary>
         <div className="p-3 space-y-2">
           {(cv.languages || []).map((l, i) => (
-            <div key={i} className="flex gap-2 items-end" data-testid={`edit-lang-${i}`}>
+            <div key={keyFor(l, `lang-${i}`)} className="flex gap-2 items-end" data-testid={`edit-lang-${i}`}>
               <Field label="Langue" className="flex-1">
                 <TxtInput value={l.name || ""} onChange={(ev) => {
                   const next = [...cv.languages]; next[i] = { ...l, name: ev.target.value }; updCv({ languages: next });
@@ -379,7 +385,7 @@ export default function FullEditor({ data, setData, tab }) {
           ))}
           <button
             type="button"
-            onClick={() => updCv({ languages: [...(cv.languages || []), { name: "", level: "" }] })}
+            onClick={() => updCv({ languages: [...(cv.languages || []), { _uid: newUid(), name: "", level: "" }] })}
             className="brut-btn brut-btn-ghost !py-1.5 !px-3 text-sm"
             data-testid="add-language"
           >
@@ -392,7 +398,7 @@ export default function FullEditor({ data, setData, tab }) {
         <summary className="cursor-pointer p-3 font-bold bg-zinc-50">Certifications ({(cv.certifications || []).length})</summary>
         <div className="p-3 space-y-2">
           {(cv.certifications || []).map((cer, i) => (
-            <div key={i} className="grid grid-cols-[1fr_1fr_80px_auto] gap-2 items-end" data-testid={`edit-cert-${i}`}>
+            <div key={keyFor(cer, `cert-${i}`)} className="grid grid-cols-[1fr_1fr_80px_auto] gap-2 items-end" data-testid={`edit-cert-${i}`}>
               <Field label="Intitulé"><TxtInput value={cer.name || ""} onChange={(ev) => {
                 const next = [...cv.certifications]; next[i] = { ...cer, name: ev.target.value }; updCv({ certifications: next });
               }} /></Field>
@@ -413,7 +419,7 @@ export default function FullEditor({ data, setData, tab }) {
           ))}
           <button
             type="button"
-            onClick={() => updCv({ certifications: [...(cv.certifications || []), { name: "", issuer: "", year: "" }] })}
+            onClick={() => updCv({ certifications: [...(cv.certifications || []), { _uid: newUid(), name: "", issuer: "", year: "" }] })}
             className="brut-btn brut-btn-ghost !py-1.5 !px-3 text-sm"
             data-testid="add-certification"
           >
