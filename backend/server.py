@@ -3,21 +3,28 @@
 Generates a tailored CV and motivation letter from a profile and a job offer
 using Claude Sonnet 4.5 via the Emergent integration library.
 """
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Form
-from fastapi.responses import JSONResponse
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Optional, Any, Dict
-from pathlib import Path
-from datetime import datetime, timezone
 import os
 import io
 import re
 import json
 import uuid
 import logging
+from typing import List, Optional, Any, Dict
+
+import requests
+from bs4 import BeautifulSoup
+import html2text
+from pypdf import PdfReader
+from docx import Document
+
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Form, Depends, Request, Cookie, Header, Response as FResponse
+from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
+from starlette.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel, Field, ConfigDict
+from pathlib import Path
+from datetime import datetime, timezone, timedelta
 
 import requests
 from bs4 import BeautifulSoup
@@ -48,9 +55,29 @@ db = mongo_client[DB_NAME]
 
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 ANTHROPIC_MODEL = "claude-sonnet-4-5-20250929"
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").strip().lower()
+EMERGENT_AUTH_BASE = "https://demobackend.emergentagent.com/auth/v1/env"
 
 app = FastAPI(title="Cible CV API")
 api = APIRouter(prefix="/api")
+
+
+# ---------- Auth models ----------
+class User(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    picture: Optional[str] = None
+    role: str = "user"
+    created_at: str
+
+
+class AuthMeResponse(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    picture: Optional[str] = None
+    role: str
 
 
 # ---------- Models ----------
@@ -162,8 +189,182 @@ async def root():
     return {"app": "Cible CV", "status": "ok"}
 
 
+# ---------- Auth helpers ----------
+SESSION_COOKIE = "session_token"
+SESSION_TTL_DAYS = 7
+
+
+def _extract_session_token(
+    cookie_token: Optional[str],
+    auth_header: Optional[str],
+) -> Optional[str]:
+    if cookie_token:
+        return cookie_token
+    if auth_header and auth_header.lower().startswith("bearer "):
+        return auth_header.split(" ", 1)[1].strip()
+    return None
+
+
+async def _user_from_session(token: str) -> Optional[Dict[str, Any]]:
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not session:
+        return None
+    expires_at = session.get("expires_at")
+    if isinstance(expires_at, str):
+        try:
+            expires_at = datetime.fromisoformat(expires_at)
+        except ValueError:
+            return None
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at and expires_at < datetime.now(timezone.utc):
+        return None
+    user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+    return user
+
+
+async def get_current_user(
+    session_token: Optional[str] = Cookie(default=None),
+    authorization: Optional[str] = Header(default=None),
+) -> Dict[str, Any]:
+    token = _extract_session_token(session_token, authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Non authentifié")
+    user = await _user_from_session(token)
+    if not user:
+        raise HTTPException(status_code=401, detail="Session invalide ou expirée")
+    return user
+
+
+async def require_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Réservé aux admins")
+    return user
+
+
+def _set_session_cookie(response: FResponse, token: str) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        max_age=SESSION_TTL_DAYS * 24 * 3600,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+    )
+
+
+async def _ensure_user_and_session(profile: Dict[str, Any]) -> Dict[str, Any]:
+    """Upsert user from Emergent profile, decide role, store session, return user."""
+    email = (profile.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email manquant dans le profil OAuth")
+
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    if existing:
+        user = existing
+        update = {
+            "name": profile.get("name") or existing.get("name"),
+            "picture": profile.get("picture") or existing.get("picture"),
+        }
+        await db.users.update_one({"user_id": user["user_id"]}, {"$set": update})
+        user.update(update)
+    else:
+        admin_count = await db.users.count_documents({"role": "admin"})
+        role = "admin" if (
+            (ADMIN_EMAIL and email == ADMIN_EMAIL) or admin_count == 0
+        ) else "user"
+        user = {
+            "user_id": f"user_{uuid.uuid4().hex[:12]}",
+            "email": email,
+            "name": profile.get("name") or email.split("@")[0],
+            "picture": profile.get("picture"),
+            "role": role,
+            "created_at": now_iso,
+        }
+        await db.users.insert_one(user)
+        if role == "admin":
+            # Migrate orphan data (no user_id) to this first admin.
+            await db.generations.update_many(
+                {"user_id": {"$exists": False}},
+                {"$set": {"user_id": user["user_id"]}},
+            )
+            await db.base_profile.update_many(
+                {"user_id": {"$exists": False}},
+                {"$set": {"user_id": user["user_id"]}},
+            )
+
+    session_token = profile.get("session_token") or uuid.uuid4().hex
+    expires_at = datetime.now(timezone.utc) + timedelta(days=SESSION_TTL_DAYS)
+    await db.user_sessions.insert_one(
+        {
+            "user_id": user["user_id"],
+            "session_token": session_token,
+            "expires_at": expires_at,
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+    user["session_token"] = session_token
+    return user
+
+
+# ---------- Auth endpoints ----------
+@api.post("/auth/process-session")
+async def auth_process_session(
+    response: FResponse,
+    x_session_id: Optional[str] = Header(default=None, alias="X-Session-ID"),
+):
+    if not x_session_id:
+        raise HTTPException(status_code=400, detail="X-Session-ID requis")
+    try:
+        r = requests.get(
+            f"{EMERGENT_AUTH_BASE}/oauth/session-data",
+            headers={"X-Session-ID": x_session_id},
+            timeout=10,
+        )
+        r.raise_for_status()
+        profile = r.json()
+    except Exception as e:
+        logger.exception("Emergent session-data fetch failed")
+        raise HTTPException(status_code=502, detail=f"OAuth fetch failed: {e}")
+
+    user = await _ensure_user_and_session(profile)
+    _set_session_cookie(response, user["session_token"])
+    return {
+        "user_id": user["user_id"],
+        "email": user["email"],
+        "name": user["name"],
+        "picture": user.get("picture"),
+        "role": user["role"],
+    }
+
+
+@api.get("/auth/me", response_model=AuthMeResponse)
+async def auth_me(user: Dict[str, Any] = Depends(get_current_user)):
+    return AuthMeResponse(
+        user_id=user["user_id"],
+        email=user["email"],
+        name=user["name"],
+        picture=user.get("picture"),
+        role=user.get("role", "user"),
+    )
+
+
+@api.post("/auth/logout")
+async def auth_logout(
+    response: FResponse,
+    session_token: Optional[str] = Cookie(default=None),
+):
+    if session_token:
+        await db.user_sessions.delete_one({"session_token": session_token})
+    response.delete_cookie(SESSION_COOKIE, path="/", samesite="none", secure=True)
+    return {"ok": True}
+
+
 @api.post("/parse/pdf")
-async def parse_pdf(file: UploadFile = File(...)):
+async def parse_pdf(file: UploadFile = File(...), _user: Dict[str, Any] = Depends(get_current_user)):
     content = await file.read()
     name = (file.filename or "").lower()
     text = ""
@@ -187,7 +388,7 @@ async def parse_pdf(file: UploadFile = File(...)):
 
 
 @api.post("/parse/url")
-async def parse_url(payload: Dict[str, str]):
+async def parse_url(payload: Dict[str, str], _user: Dict[str, Any] = Depends(get_current_user)):
     url = (payload.get("url") or "").strip()
     if not url:
         raise HTTPException(status_code=400, detail="URL requise")
@@ -289,7 +490,7 @@ RAPPEL: Reste fidèle au parcours réel du candidat. Sors UNIQUEMENT le JSON.
 
 
 @api.post("/generate")
-async def generate(req: GenerationCreate):
+async def generate(req: GenerationCreate, user: Dict[str, Any] = Depends(get_current_user)):
     if not req.profile_text or len(req.profile_text) < 50:
         raise HTTPException(status_code=400, detail="Profil insuffisant pour générer.")
     if not req.job_text or len(req.job_text) < 50:
@@ -318,6 +519,7 @@ async def generate(req: GenerationCreate):
 
     doc = {
         "id": rec_id,
+        "user_id": user["user_id"],
         "title": title,
         "company": company,
         "position": position,
@@ -338,9 +540,10 @@ async def generate(req: GenerationCreate):
 
 
 @api.get("/generations")
-async def list_generations():
+async def list_generations(user: Dict[str, Any] = Depends(get_current_user)):
+    query = {} if user.get("role") == "admin" else {"user_id": user["user_id"]}
     cursor = db.generations.find(
-        {},
+        query,
         {
             "_id": 0,
             "id": 1,
@@ -350,6 +553,7 @@ async def list_generations():
             "template": 1,
             "created_at": 1,
             "adaptations": 1,
+            "user_id": 1,
         },
     ).sort("created_at", -1).limit(200)
     items = await cursor.to_list(200)
@@ -360,19 +564,29 @@ async def list_generations():
 
 
 @api.get("/generations/{gen_id}")
-async def get_generation(gen_id: str):
-    doc = await db.generations.find_one({"id": gen_id}, {"_id": 0})
+async def get_generation(gen_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    query = {"id": gen_id}
+    if user.get("role") != "admin":
+        query["user_id"] = user["user_id"]
+    doc = await db.generations.find_one(query, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Génération introuvable")
     return doc
 
 
 @api.put("/generations/{gen_id}")
-async def update_generation(gen_id: str, update: GenerationUpdate):
+async def update_generation(
+    gen_id: str,
+    update: GenerationUpdate,
+    user: Dict[str, Any] = Depends(get_current_user),
+):
     patch = {k: v for k, v in update.model_dump(exclude_none=True).items()}
     if not patch:
         raise HTTPException(status_code=400, detail="Rien à mettre à jour")
-    result = await db.generations.update_one({"id": gen_id}, {"$set": patch})
+    query = {"id": gen_id}
+    if user.get("role") != "admin":
+        query["user_id"] = user["user_id"]
+    result = await db.generations.update_one(query, {"$set": patch})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Génération introuvable")
     doc = await db.generations.find_one({"id": gen_id}, {"_id": 0})
@@ -380,8 +594,11 @@ async def update_generation(gen_id: str, update: GenerationUpdate):
 
 
 @api.delete("/generations/{gen_id}")
-async def delete_generation(gen_id: str):
-    result = await db.generations.delete_one({"id": gen_id})
+async def delete_generation(gen_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    query = {"id": gen_id}
+    if user.get("role") != "admin":
+        query["user_id"] = user["user_id"]
+    result = await db.generations.delete_one(query)
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Génération introuvable")
     return {"ok": True}
@@ -600,8 +817,11 @@ def _safe_name(name: str) -> str:
 
 
 @api.get("/generations/{gen_id}/export/cv.docx")
-async def export_cv_docx(gen_id: str):
-    doc = await db.generations.find_one({"id": gen_id}, {"_id": 0})
+async def export_cv_docx(gen_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    query = {"id": gen_id}
+    if user.get("role") != "admin":
+        query["user_id"] = user["user_id"]
+    doc = await db.generations.find_one(query, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Génération introuvable")
     blob = build_cv_docx(doc.get("cv") or {})
@@ -614,8 +834,11 @@ async def export_cv_docx(gen_id: str):
 
 
 @api.get("/generations/{gen_id}/export/letter.docx")
-async def export_letter_docx(gen_id: str):
-    doc = await db.generations.find_one({"id": gen_id}, {"_id": 0})
+async def export_letter_docx(gen_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    query = {"id": gen_id}
+    if user.get("role") != "admin":
+        query["user_id"] = user["user_id"]
+    doc = await db.generations.find_one(query, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Génération introuvable")
     blob = build_letter_docx(
@@ -633,34 +856,42 @@ async def export_letter_docx(gen_id: str):
 
 # ---- Base profile ("CV de base") ----
 @api.get("/profile/base")
-async def get_base_profile():
-    doc = await db.base_profile.find_one({"id": "default"}, {"_id": 0})
+async def get_base_profile(user: Dict[str, Any] = Depends(get_current_user)):
+    doc = await db.base_profile.find_one({"user_id": user["user_id"]}, {"_id": 0})
     if not doc:
         return {"exists": False}
     return {"exists": True, **doc}
 
 
 @api.put("/profile/base")
-async def put_base_profile(payload: Dict[str, Any]):
+async def put_base_profile(
+    payload: Dict[str, Any],
+    user: Dict[str, Any] = Depends(get_current_user),
+):
     doc = {
-        "id": "default",
+        "user_id": user["user_id"],
         "profile_text": payload.get("profile_text", ""),
         "cv": payload.get("cv") or {},
         "photo_data_url": payload.get("photo_data_url"),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.base_profile.update_one({"id": "default"}, {"$set": doc}, upsert=True)
+    await db.base_profile.update_one(
+        {"user_id": user["user_id"]}, {"$set": doc}, upsert=True
+    )
     return {"exists": True, **doc}
 
 
 @api.delete("/profile/base")
-async def delete_base_profile():
-    await db.base_profile.delete_one({"id": "default"})
+async def delete_base_profile(user: Dict[str, Any] = Depends(get_current_user)):
+    await db.base_profile.delete_one({"user_id": user["user_id"]})
     return {"ok": True}
 
 
 @api.post("/regroup-skills")
-async def regroup_skills(payload: Dict[str, Any]):
+async def regroup_skills(
+    payload: Dict[str, Any],
+    _user: Dict[str, Any] = Depends(get_current_user),
+):
     skills = payload.get("skills") or []
     tools = payload.get("tools") or []
     if not skills and not tools:
@@ -685,13 +916,24 @@ async def regroup_skills(payload: Dict[str, Any]):
 
 
 app.include_router(api)
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+_cors_origins = os.environ.get("CORS_ORIGINS", "").strip()
+if _cors_origins and _cors_origins != "*":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_credentials=True,
+        allow_origins=[o.strip() for o in _cors_origins.split(",") if o.strip()],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    # Permissive but cookie-friendly: regex matches any origin while still allowing credentials
+    app.add_middleware(
+        CORSMiddleware,
+        allow_credentials=True,
+        allow_origin_regex=".*",
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.on_event("shutdown")
