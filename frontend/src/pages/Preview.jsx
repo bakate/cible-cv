@@ -6,16 +6,15 @@ import CVCorporate from "../components/CVCorporate";
 import CVStartup from "../components/CVStartup";
 import LetterTemplate from "../components/LetterTemplate";
 import FullEditor from "../components/FullEditor";
-import { getGeneration, updateGeneration, deleteGeneration, saveBaseProfile, exportCvDocxUrl, exportLetterDocxUrl } from "../lib/api";
+import { getGeneration, updateGeneration, deleteGeneration, saveBaseProfile, exportCvDocxUrl, exportLetterDocxUrl, exportCvPdfUrl, exportLetterPdfUrl } from "../lib/api";
 
 export default function Preview() {
   const { id } = useParams();
   const [data, setData] = useState(null);
   const [tab, setTab] = useState("cv");
   const [editing, setEditing] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [highlight, setHighlight] = useState(false);
   const cvRef = useRef(null);
+  const [highlight, setHighlight] = useState(false);
   const letterRef = useRef(null);
 
   useEffect(() => {
@@ -64,88 +63,16 @@ export default function Preview() {
     }
   };
 
-  const exportPdf = async (which) => {
-    setExporting(true);
-    try {
-      const { default: html2canvas } = await import("html2canvas");
-      const { jsPDF } = await import("jspdf");
-      const source = which === "cv" ? cvRef.current : letterRef.current;
-      if (!source) throw new Error("Élément introuvable");
-      // Offscreen clone so we render even when tab is hidden.
-      const clone = source.cloneNode(true);
-      clone.style.display = "block";
-      const holder = document.createElement("div");
-      holder.style.position = "fixed";
-      holder.style.left = "-10000px";
-      holder.style.top = "0";
-      holder.style.width = "210mm";
-      holder.style.background = "#fff";
-      holder.appendChild(clone);
-      document.body.appendChild(holder);
-
-      try {
-        const canvas = await html2canvas(clone, {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-          windowWidth: 794,
-          scrollX: 0,
-          scrollY: 0,
-        });
-        const pageWmm = 210;
-        const pageHmm = 297;
-        const imgWmm = pageWmm;
-        const fullImgHmm = (canvas.height * imgWmm) / canvas.width;
-        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-        const imgData = canvas.toDataURL("image/jpeg", 0.95);
-        let imgX = 0;
-        let imgY = 0;
-        let imgW = imgWmm;
-        let imgH = fullImgHmm;
-        if (fullImgHmm <= pageHmm + 0.5) {
-          // fits naturally
-        } else if (fullImgHmm <= pageHmm * 1.15) {
-          imgH = pageHmm; // slight anamorphic squish
-        } else {
-          const scale = pageHmm / fullImgHmm;
-          imgW = imgWmm * scale;
-          imgH = pageHmm;
-          imgX = (pageWmm - imgW) / 2;
-        }
-        pdf.addImage(imgData, "JPEG", imgX, imgY, imgW, imgH);
-
-        // Add clickable link annotations on top of the raster image.
-        const cloneRect = clone.getBoundingClientRect();
-        const linkEls = clone.querySelectorAll("[data-pdf-link]");
-        const pxToMmX = imgW / cloneRect.width;
-        const pxToMmY = imgH / cloneRect.height;
-        linkEls.forEach((el) => {
-          const r = el.getBoundingClientRect();
-          const url = el.getAttribute("data-pdf-link");
-          if (!url) return;
-          pdf.link(
-            imgX + (r.left - cloneRect.left) * pxToMmX,
-            imgY + (r.top - cloneRect.top) * pxToMmY,
-            r.width * pxToMmX,
-            r.height * pxToMmY,
-            { url },
-          );
-        });
-        const safeName = (data.cv.full_name || "candidat").replace(/\s+/g, "_");
-        const filename = which === "cv"
-          ? `CV-${safeName}-${data.company}.pdf`
-          : `Lettre-${safeName}-${data.company}.pdf`;
-        pdf.save(filename);
-        toast.success("PDF exporté");
-      } finally {
-        document.body.removeChild(holder);
-      }
-    } catch (e) {
-      console.error(e);
-      toast.error("Export PDF échoué");
-    } finally {
-      setExporting(false);
-    }
+  const exportPdf = (which) => {
+    const url = which === "cv" ? exportCvPdfUrl(id) : exportLetterPdfUrl(id);
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast.success("PDF en cours de téléchargement");
   };
 
   const copyLetterText = async () => {
@@ -289,11 +216,11 @@ export default function Preview() {
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => exportPdf(tab)}
-                disabled={exporting}
                 className="brut-btn"
                 data-testid="export-pdf-button"
+                title="PDF texte natif — extractable par les ATS"
               >
-                {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                <Download className="w-4 h-4" />
                 PDF
               </button>
               <button

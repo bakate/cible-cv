@@ -38,6 +38,14 @@ from docx.shared import Pt, RGBColor, Cm
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from fastapi.responses import Response
 
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, KeepTogether
+from reportlab.platypus.flowables import HRFlowable
+from reportlab.lib.enums import TA_RIGHT
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
@@ -816,6 +824,174 @@ def _safe_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9_\-]+", "_", name or "candidat").strip("_") or "candidat"
 
 
+# ---------- Text-based PDF (ATS-friendly) ----------
+def _esc(s: Any) -> str:
+    if s is None:
+        return ""
+    return (
+        str(s)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def _pdf_styles(accent_hex: str) -> Dict[str, ParagraphStyle]:
+    accent = colors.HexColor(accent_hex)
+    muted = colors.HexColor("#555555")
+    return {
+        "name": ParagraphStyle("Name", fontSize=22, leading=24, fontName="Helvetica-Bold", spaceAfter=2),
+        "headline": ParagraphStyle("Headline", fontSize=12, leading=15, fontName="Helvetica-Bold", textColor=accent, spaceAfter=4),
+        "contact": ParagraphStyle("Contact", fontSize=9, leading=11, fontName="Helvetica", textColor=muted),
+        "section": ParagraphStyle("Section", fontSize=10.5, leading=13, fontName="Helvetica-Bold", textColor=accent, spaceBefore=10, spaceAfter=4),
+        "body": ParagraphStyle("Body", fontSize=10, leading=13, fontName="Helvetica"),
+        "exp_title": ParagraphStyle("ExpTitle", fontSize=11, leading=13, fontName="Helvetica-Bold", spaceBefore=4, spaceAfter=0),
+        "exp_meta": ParagraphStyle("ExpMeta", fontSize=9.5, leading=12, fontName="Helvetica-Oblique", textColor=muted, spaceAfter=2),
+        "bullet": ParagraphStyle("Bullet", fontSize=10, leading=13, fontName="Helvetica", leftIndent=12),
+        "right": ParagraphStyle("Right", fontSize=11, leading=14, fontName="Helvetica", alignment=TA_RIGHT),
+        "letter_body": ParagraphStyle("LetterBody", fontSize=11, leading=15, fontName="Helvetica", spaceAfter=6),
+        "letter_bold": ParagraphStyle("LetterBold", fontSize=11, leading=15, fontName="Helvetica-Bold"),
+    }
+
+
+def _pdf_header(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle]) -> None:
+    flow.append(Paragraph(_esc(cv.get("full_name", "")), styles["name"]))
+    if cv.get("headline"):
+        flow.append(Paragraph(_esc(cv["headline"]), styles["headline"]))
+    contact = cv.get("contact") or {}
+    parts = [contact[k] for k in ("email", "phone", "location", "linkedin", "github", "website") if contact.get(k)]
+    if parts:
+        flow.append(Paragraph(" &nbsp;·&nbsp; ".join(_esc(p) for p in parts), styles["contact"]))
+    flow.append(HRFlowable(width="100%", thickness=1.2, color=colors.black, spaceBefore=4, spaceAfter=4))
+
+
+def _pdf_experiences(flow: List, experiences: List[Dict[str, Any]], styles: Dict[str, ParagraphStyle]) -> None:
+    if not experiences:
+        return
+    flow.append(Paragraph("EXPÉRIENCES PROFESSIONNELLES", styles["section"]))
+    for e in experiences:
+        title = _esc(e.get("title", ""))
+        company = _esc(e.get("company", ""))
+        flow.append(Paragraph(f"<b>{title}</b> · {company}", styles["exp_title"]))
+        loc = _esc(e.get("location", ""))
+        dates = f"{_esc(e.get('start', ''))} – {_esc(e.get('end', ''))}"
+        meta = f"{loc} &nbsp;|&nbsp; {dates}" if loc else dates
+        flow.append(Paragraph(meta, styles["exp_meta"]))
+        for b in (e.get("bullets") or []):
+            flow.append(Paragraph(f"•&nbsp; {_esc(b)}", styles["bullet"]))
+        flow.append(Spacer(1, 4))
+
+
+def _pdf_education(flow: List, education: List[Dict[str, Any]], styles: Dict[str, ParagraphStyle]) -> None:
+    if not education:
+        return
+    flow.append(Paragraph("FORMATION", styles["section"]))
+    for ed in education:
+        flow.append(Paragraph(f"<b>{_esc(ed.get('degree', ''))}</b> · {_esc(ed.get('school', ''))}", styles["exp_title"]))
+        dates = f"{_esc(ed.get('start', ''))} – {_esc(ed.get('end', ''))}"
+        if ed.get("details"):
+            dates += f" — {_esc(ed['details'])}"
+        flow.append(Paragraph(dates, styles["exp_meta"]))
+
+
+def _pdf_skills(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle]) -> None:
+    if cv.get("skill_groups"):
+        flow.append(Paragraph("COMPÉTENCES", styles["section"]))
+        for g in cv["skill_groups"]:
+            cat = _esc(g.get("category", ""))
+            items = " · ".join(_esc(i) for i in (g.get("items") or []))
+            flow.append(Paragraph(f"<b>{cat} :</b> {items}", styles["body"]))
+            flow.append(Spacer(1, 2))
+        return
+    if cv.get("skills"):
+        flow.append(Paragraph("COMPÉTENCES", styles["section"]))
+        flow.append(Paragraph(" · ".join(_esc(s) for s in cv["skills"]), styles["body"]))
+    if cv.get("tools"):
+        flow.append(Paragraph("OUTILS", styles["section"]))
+        flow.append(Paragraph(" · ".join(_esc(s) for s in cv["tools"]), styles["body"]))
+
+
+def _pdf_extras(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle]) -> None:
+    if cv.get("languages"):
+        flow.append(Paragraph("LANGUES", styles["section"]))
+        langs = " · ".join(
+            f"{_esc(lang.get('name', ''))} ({_esc(lang.get('level', ''))})"
+            for lang in cv["languages"]
+            if lang.get("name")
+        )
+        flow.append(Paragraph(langs, styles["body"]))
+    if cv.get("certifications"):
+        flow.append(Paragraph("CERTIFICATIONS", styles["section"]))
+        for cer in cv["certifications"]:
+            line = _esc(cer.get("name", ""))
+            if cer.get("issuer"):
+                line += f" — {_esc(cer['issuer'])}"
+            if cer.get("year"):
+                line += f" ({_esc(cer['year'])})"
+            flow.append(Paragraph(line, styles["body"]))
+    if cv.get("interests"):
+        flow.append(Paragraph("CENTRES D'INTÉRÊT", styles["section"]))
+        flow.append(Paragraph(" · ".join(_esc(i) for i in cv["interests"]), styles["body"]))
+
+
+def build_cv_pdf_text(cv: Dict[str, Any]) -> bytes:
+    accent_hex = ((cv.get("theme") or {}).get("accent")) or "#FF3E1A"
+    styles = _pdf_styles(accent_hex)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=18 * mm, rightMargin=18 * mm,
+        topMargin=16 * mm, bottomMargin=16 * mm,
+        title=cv.get("full_name", "CV"),
+    )
+    flow: List = []
+    _pdf_header(flow, cv, styles)
+    if cv.get("summary"):
+        flow.append(Paragraph("PROFIL", styles["section"]))
+        flow.append(Paragraph(_esc(cv["summary"]), styles["body"]))
+    _pdf_experiences(flow, cv.get("experiences") or [], styles)
+    _pdf_education(flow, cv.get("education") or [], styles)
+    _pdf_skills(flow, cv, styles)
+    _pdf_extras(flow, cv, styles)
+    doc.build(flow)
+    return buf.getvalue()
+
+
+def build_letter_pdf_text(letter: Dict[str, Any], sender_cv: Dict[str, Any], company: str) -> bytes:
+    accent_hex = ((sender_cv.get("theme") or {}).get("accent")) or "#FF3E1A"
+    styles = _pdf_styles(accent_hex)
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=22 * mm, rightMargin=22 * mm,
+        topMargin=22 * mm, bottomMargin=22 * mm,
+        title="Lettre de motivation",
+    )
+    flow: List = []
+    sender_contact = (sender_cv or {}).get("contact") or {}
+    flow.append(Paragraph(f"<b>{_esc(sender_cv.get('full_name', ''))}</b>", styles["letter_body"]))
+    for k in ("email", "phone", "location"):
+        v = sender_contact.get(k)
+        if v:
+            flow.append(Paragraph(_esc(v), styles["letter_body"]))
+    flow.append(Spacer(1, 10))
+    flow.append(Paragraph(f"<b>{_esc(company)}</b>", styles["right"]))
+    today = datetime.now().strftime("%d/%m/%Y")
+    flow.append(Paragraph(today, styles["right"]))
+    flow.append(Spacer(1, 16))
+    if letter.get("subject"):
+        flow.append(Paragraph(f"<b>Objet :</b> {_esc(letter['subject'])}", styles["letter_body"]))
+    if letter.get("recipient"):
+        flow.append(Paragraph(_esc(letter["recipient"]), styles["letter_body"]))
+    for para in (letter.get("body") or "").split("\n"):
+        if para.strip():
+            flow.append(Paragraph(_esc(para), styles["letter_body"]))
+        else:
+            flow.append(Spacer(1, 6))
+    doc.build(flow)
+    return buf.getvalue()
+
+
 @api.get("/generations/{gen_id}/export/cv.docx")
 async def export_cv_docx(gen_id: str, user: Dict[str, Any] = Depends(get_current_user)):
     query = {"id": gen_id}
@@ -829,6 +1005,44 @@ async def export_cv_docx(gen_id: str, user: Dict[str, Any] = Depends(get_current
     return Response(
         content=blob,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
+    )
+
+
+@api.get("/generations/{gen_id}/export/cv.pdf")
+async def export_cv_pdf(gen_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    query = {"id": gen_id}
+    if user.get("role") != "admin":
+        query["user_id"] = user["user_id"]
+    doc = await db.generations.find_one(query, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Génération introuvable")
+    blob = build_cv_pdf_text(doc.get("cv") or {})
+    fn = f"CV-{_safe_name(doc.get('cv', {}).get('full_name', ''))}-{_safe_name(doc.get('company', ''))}.pdf"
+    return Response(
+        content=blob,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fn}"'},
+    )
+
+
+@api.get("/generations/{gen_id}/export/letter.pdf")
+async def export_letter_pdf(gen_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+    query = {"id": gen_id}
+    if user.get("role") != "admin":
+        query["user_id"] = user["user_id"]
+    doc = await db.generations.find_one(query, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Génération introuvable")
+    blob = build_letter_pdf_text(
+        doc.get("letter") or {},
+        doc.get("cv") or {},
+        doc.get("company") or "",
+    )
+    fn = f"Lettre-{_safe_name(doc.get('cv', {}).get('full_name', ''))}-{_safe_name(doc.get('company', ''))}.pdf"
+    return Response(
+        content=blob,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{fn}"'},
     )
 
