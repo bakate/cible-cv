@@ -50,7 +50,9 @@ export const deleteBaseProfile = async () => (await api.delete("/profile/base"))
 
 export const regroupSkills = async (payload) => (await api.post("/regroup-skills", payload)).data;
 
-export const exportCvPdfUrl = (id) => `${API}/generations/${id}/export/cv.pdf`;
+export const exportCvPdfUrl = (id, layout = "single") => `${API}/generations/${id}/export/cv.pdf?layout=${layout}`;
 export const exportLetterPdfUrl = (id) => `${API}/generations/${id}/export/letter.pdf`;
 export const exportCvDocxUrl = (id) => `${API}/generations/${id}/export/cv.docx`;
 export const exportLetterDocxUrl = (id) => `${API}/generations/${id}/export/letter.docx`;
+
+export const atsCheck = async (payload) => (await api.post("/ats-check", payload)).data;

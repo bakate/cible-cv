@@ -42,7 +42,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, KeepTogether
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, KeepTogether, Table, TableStyle, BalancedColumns
 from reportlab.platypus.flowables import HRFlowable
 from reportlab.lib.enums import TA_RIGHT
 
@@ -449,9 +449,9 @@ Génère un objet JSON structuré exactement comme suit:
       "email": "string ou null",
       "phone": "string ou null",
       "location": "string ou null",
-      "linkedin": "string ou null",
-      "github": "string ou null",
-      "website": "string ou null"
+      "linkedin": "URL complète (ex: https://www.linkedin.com/in/...) ou null",
+      "github": "URL complète (ex: https://github.com/...) ou null",
+      "website": "URL complète (ex: https://...) ou null"
     }},
     "summary": "résumé pro 3-4 lignes orienté annonce",
     "skill_groups": [
@@ -836,6 +836,20 @@ def _esc(s: Any) -> str:
     )
 
 
+def _contact_link(kind: str, value: str, accent_hex: str) -> str:
+    """Wrap a contact value into a clickable reportlab anchor."""
+    text = _esc(value)
+    if kind == "email":
+        href = f"mailto:{value}"
+    elif kind == "phone":
+        href = "tel:" + re.sub(r"[^0-9+]", "", value)
+    elif kind in ("linkedin", "github", "website"):
+        href = value if str(value).startswith("http") else f"https://{value}"
+    else:
+        return text
+    return f'<a href="{_esc(href)}" color="{accent_hex}">{text}</a>'
+
+
 def _pdf_styles(accent_hex: str) -> Dict[str, ParagraphStyle]:
     accent = colors.HexColor(accent_hex)
     muted = colors.HexColor("#555555")
@@ -854,14 +868,22 @@ def _pdf_styles(accent_hex: str) -> Dict[str, ParagraphStyle]:
     }
 
 
-def _pdf_header(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle]) -> None:
+def _pdf_header(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle], accent_hex: str) -> None:
     flow.append(Paragraph(_esc(cv.get("full_name", "")), styles["name"]))
     if cv.get("headline"):
         flow.append(Paragraph(_esc(cv["headline"]), styles["headline"]))
     contact = cv.get("contact") or {}
-    parts = [contact[k] for k in ("email", "phone", "location", "linkedin", "github", "website") if contact.get(k)]
+    parts = []
+    for kind in ("email", "phone", "location", "linkedin", "github", "website"):
+        val = contact.get(kind)
+        if not val:
+            continue
+        if kind == "location":
+            parts.append(_esc(val))
+        else:
+            parts.append(_contact_link(kind, val, accent_hex))
     if parts:
-        flow.append(Paragraph(" &nbsp;·&nbsp; ".join(_esc(p) for p in parts), styles["contact"]))
+        flow.append(Paragraph(" &nbsp;·&nbsp; ".join(parts), styles["contact"]))
     flow.append(HRFlowable(width="100%", thickness=1.2, color=colors.black, spaceBefore=4, spaceAfter=4))
 
 
@@ -934,18 +956,48 @@ def _pdf_extras(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle
         flow.append(Paragraph(" · ".join(_esc(i) for i in cv["interests"]), styles["body"]))
 
 
-def build_cv_pdf_text(cv: Dict[str, Any]) -> bytes:
+def build_cv_pdf_text(cv: Dict[str, Any], layout: str = "single") -> bytes:
     accent_hex = ((cv.get("theme") or {}).get("accent")) or "#FF3E1A"
     styles = _pdf_styles(accent_hex)
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
         buf, pagesize=A4,
-        leftMargin=18 * mm, rightMargin=18 * mm,
-        topMargin=16 * mm, bottomMargin=16 * mm,
+        leftMargin=15 * mm, rightMargin=15 * mm,
+        topMargin=15 * mm, bottomMargin=15 * mm,
         title=cv.get("full_name", "CV"),
     )
-    flow: List = []
-    _pdf_header(flow, cv, styles)
+
+    if layout == "two-col":
+        # Header full-width then two balanced columns (auto-paginating).
+        flow: List = []
+        _pdf_header(flow, cv, styles, accent_hex)
+
+        body: List = []
+        if cv.get("summary"):
+            body.append(Paragraph("PROFIL", styles["section"]))
+            body.append(Paragraph(_esc(cv["summary"]), styles["body"]))
+        _pdf_experiences(body, cv.get("experiences") or [], styles)
+        _pdf_education(body, cv.get("education") or [], styles)
+        _pdf_skills(body, cv, styles)
+        _pdf_extras(body, cv, styles)
+
+        flow.append(
+            BalancedColumns(
+                body,
+                nCols=2,
+                needed=72,
+                spaceBefore=4,
+                spaceAfter=4,
+                vLinesStrokeColor=None,
+                innerPadding=6 * mm,
+            )
+        )
+        doc.build(flow)
+        return buf.getvalue()
+
+    # Single-column (ATS-optimal)
+    flow = []
+    _pdf_header(flow, cv, styles, accent_hex)
     if cv.get("summary"):
         flow.append(Paragraph("PROFIL", styles["section"]))
         flow.append(Paragraph(_esc(cv["summary"]), styles["body"]))
@@ -1010,14 +1062,18 @@ async def export_cv_docx(gen_id: str, user: Dict[str, Any] = Depends(get_current
 
 
 @api.get("/generations/{gen_id}/export/cv.pdf")
-async def export_cv_pdf(gen_id: str, user: Dict[str, Any] = Depends(get_current_user)):
+async def export_cv_pdf(
+    gen_id: str,
+    layout: str = "single",
+    user: Dict[str, Any] = Depends(get_current_user),
+):
     query = {"id": gen_id}
     if user.get("role") != "admin":
         query["user_id"] = user["user_id"]
     doc = await db.generations.find_one(query, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Génération introuvable")
-    blob = build_cv_pdf_text(doc.get("cv") or {})
+    blob = build_cv_pdf_text(doc.get("cv") or {}, layout=layout)
     fn = f"CV-{_safe_name(doc.get('cv', {}).get('full_name', ''))}-{_safe_name(doc.get('company', ''))}.pdf"
     return Response(
         content=blob,
@@ -1126,6 +1182,93 @@ async def regroup_skills(
     except Exception as e:
         logger.exception("regroup failed")
         raise HTTPException(status_code=502, detail=f"Regroupement échoué: {e}")
+    return data
+
+
+def _cv_to_text_for_llm(cv: Dict[str, Any]) -> str:
+    parts: List[str] = []
+    if cv.get("full_name"):
+        parts.append(f"Nom: {cv['full_name']}")
+    if cv.get("headline"):
+        parts.append(f"Titre: {cv['headline']}")
+    if cv.get("summary"):
+        parts.append(f"Profil: {cv['summary']}")
+    if cv.get("experiences"):
+        parts.append("Expériences:")
+        for e in cv["experiences"]:
+            bullets = "; ".join(e.get("bullets") or [])
+            parts.append(
+                f"- {e.get('title', '')} chez {e.get('company', '')} "
+                f"({e.get('start', '')}–{e.get('end', '')}): {bullets}"
+            )
+    if cv.get("education"):
+        parts.append("Formation:")
+        for ed in cv["education"]:
+            parts.append(f"- {ed.get('degree', '')} – {ed.get('school', '')}")
+    if cv.get("skill_groups"):
+        parts.append("Compétences (par famille):")
+        for g in cv["skill_groups"]:
+            parts.append(f"- {g.get('category', '')}: {', '.join(g.get('items') or [])}")
+    elif cv.get("skills"):
+        parts.append(f"Compétences: {', '.join(cv['skills'])}")
+    if cv.get("tools"):
+        parts.append(f"Outils: {', '.join(cv['tools'])}")
+    if cv.get("languages"):
+        langs = ", ".join(
+            f"{lang.get('name', '')} ({lang.get('level', '')})"
+            for lang in cv["languages"]
+            if lang.get("name")
+        )
+        parts.append(f"Langues: {langs}")
+    return "\n".join(parts)
+
+
+@api.post("/ats-check")
+async def ats_check(
+    payload: Dict[str, Any],
+    user: Dict[str, Any] = Depends(get_current_user),
+):
+    gen_id = payload.get("generation_id")
+    if gen_id:
+        query = {"id": gen_id}
+        if user.get("role") != "admin":
+            query["user_id"] = user["user_id"]
+        doc = await db.generations.find_one(query, {"_id": 0})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Génération introuvable")
+        job_text = doc.get("job_text") or ""
+        cv_data = doc.get("cv") or {}
+    else:
+        job_text = (payload.get("job_text") or "").strip()
+        cv_data = payload.get("cv") or {}
+
+    if not job_text or not cv_data:
+        raise HTTPException(status_code=400, detail="job_text et cv requis")
+
+    cv_text = _cv_to_text_for_llm(cv_data)
+    prompt = (
+        "Tu es un auditeur ATS senior. Évalue rigoureusement la compatibilité du CV avec l'offre.\n\n"
+        f"OFFRE D'EMPLOI:\n---\n{job_text[:6000]}\n---\n\n"
+        f"CV DU CANDIDAT (structuré):\n---\n{cv_text[:6000]}\n---\n\n"
+        'Réponds STRICTEMENT en JSON, sans texte avant/après, sans markdown:\n'
+        '{\n'
+        '  "score": 0-100,\n'
+        '  "verdict": "excellent" | "bon" | "moyen" | "faible",\n'
+        '  "keywords_present": ["mots-clés présents ET dans CV ET dans offre"],\n'
+        '  "keywords_missing": ["mots-clés importants de l\'offre ABSENTS du CV"],\n'
+        '  "sections_check": {"summary": true|false, "experiences": true|false, "education": true|false, "skills": true|false, "languages": true|false, "contact": true|false},\n'
+        '  "format_warnings": ["alerte concrète", "..."],\n'
+        '  "recommendations": ["action concrète priorisée", "..."],\n'
+        '  "experience_match": "phrase courte sur le fit expérience",\n'
+        '  "skill_gap_analysis": "phrase courte sur le gap compétences"\n'
+        '}\n'
+    )
+    try:
+        raw = await claude_chat(SYSTEM_PROMPT, prompt)
+        data = _extract_json(raw)
+    except Exception as e:
+        logger.exception("ats-check failed")
+        raise HTTPException(status_code=502, detail=f"Analyse ATS échouée: {e}")
     return data
 
 

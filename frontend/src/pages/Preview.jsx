@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import { toast } from "sonner";
-import { Download, Copy, Loader2, FileText, Mail, Sparkles, ArrowLeft, Trash2, Pencil, Pin, Target, FileDown } from "lucide-react";
+import { Download, Copy, Loader2, FileText, Mail, Sparkles, ArrowLeft, Trash2, Pencil, Pin, Target, FileDown, ShieldCheck, Columns2, Square } from "lucide-react";
 import CVCorporate from "../components/CVCorporate";
 import CVStartup from "../components/CVStartup";
 import LetterTemplate from "../components/LetterTemplate";
 import FullEditor from "../components/FullEditor";
+import AtsCheckPanel from "../components/AtsCheckPanel";
 import { getGeneration, updateGeneration, deleteGeneration, saveBaseProfile, exportCvDocxUrl, exportLetterDocxUrl, exportCvPdfUrl, exportLetterPdfUrl } from "../lib/api";
 
 export default function Preview() {
@@ -15,6 +16,8 @@ export default function Preview() {
   const [editing, setEditing] = useState(false);
   const cvRef = useRef(null);
   const [highlight, setHighlight] = useState(false);
+  const [pdfLayout, setPdfLayout] = useState("single");
+  const [atsOpen, setAtsOpen] = useState(false);
   const letterRef = useRef(null);
 
   useEffect(() => {
@@ -64,7 +67,7 @@ export default function Preview() {
   };
 
   const exportPdf = (which) => {
-    const url = which === "cv" ? exportCvPdfUrl(id) : exportLetterPdfUrl(id);
+    const url = which === "cv" ? exportCvPdfUrl(id, pdfLayout) : exportLetterPdfUrl(id);
     const a = document.createElement("a");
     a.href = url;
     a.target = "_blank";
@@ -213,7 +216,37 @@ export default function Preview() {
                 <Target className="w-4 h-4" /> {highlight ? "Surlignage actif" : "Surligner matchs"}
               </button>
             )}
+            {tab === "cv" && (
+              <button
+                onClick={() => setAtsOpen(true)}
+                className="brut-btn brut-btn-ghost"
+                data-testid="ats-check-button"
+                title="Auditer la compatibilité ATS de ce CV vs l'offre"
+              >
+                <ShieldCheck className="w-4 h-4" /> ATS check
+              </button>
+            )}
             <div className="ml-auto flex items-center gap-2">
+              {tab === "cv" && (
+                <div className="flex border-2 border-black rounded-md overflow-hidden" data-testid="pdf-layout-toggle">
+                  <button
+                    onClick={() => setPdfLayout("single")}
+                    className={`px-2.5 py-2 text-xs font-bold flex items-center gap-1 ${pdfLayout === "single" ? "bg-black text-white" : "bg-white"}`}
+                    data-testid="pdf-layout-single"
+                    title="1 colonne — recommandé ATS"
+                  >
+                    <Square className="w-3 h-3" /> 1 col
+                  </button>
+                  <button
+                    onClick={() => setPdfLayout("two-col")}
+                    className={`px-2.5 py-2 text-xs font-bold flex items-center gap-1 border-l-2 border-black ${pdfLayout === "two-col" ? "bg-black text-white" : "bg-white"}`}
+                    data-testid="pdf-layout-two-col"
+                    title="2 colonnes — pour recruteurs humains"
+                  >
+                    <Columns2 className="w-3 h-3" /> 2 cols
+                  </button>
+                </div>
+              )}
               <button
                 onClick={() => exportPdf(tab)}
                 className="brut-btn"
@@ -257,6 +290,7 @@ export default function Preview() {
           </div>
         </main>
       </div>
+      {atsOpen && <AtsCheckPanel generationId={id} onClose={() => setAtsOpen(false)} />}
     </div>
   );
 }
