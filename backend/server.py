@@ -45,9 +45,44 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, KeepTogether, Table, TableStyle, BalancedColumns
 from reportlab.platypus.flowables import HRFlowable
 from reportlab.lib.enums import TA_RIGHT
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.fonts import addMapping
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
+
+# ---- Register premium TTF fonts (Inter) for ATS-friendly native PDF ----
+# Falls back to Helvetica automatically if TTF assets are missing.
+FONTS_DIR = ROOT_DIR / "fonts"
+PDF_FONT = "Helvetica"
+PDF_FONT_BOLD = "Helvetica-Bold"
+PDF_FONT_ITALIC = "Helvetica-Oblique"
+PDF_FONT_BOLD_ITALIC = "Helvetica-BoldOblique"
+try:
+    pdfmetrics.registerFont(TTFont("Inter", str(FONTS_DIR / "Inter-Regular.ttf")))
+    pdfmetrics.registerFont(TTFont("Inter-Bold", str(FONTS_DIR / "Inter-Bold.ttf")))
+    pdfmetrics.registerFont(TTFont("Inter-Italic", str(FONTS_DIR / "Inter-Italic.ttf")))
+    pdfmetrics.registerFont(TTFont("Inter-BoldItalic", str(FONTS_DIR / "Inter-BoldItalic.ttf")))
+    # Map the family so inline <b>/<i>/<b><i> tags pick the correct face
+    pdfmetrics.registerFontFamily(
+        "Inter",
+        normal="Inter",
+        bold="Inter-Bold",
+        italic="Inter-Italic",
+        boldItalic="Inter-BoldItalic",
+    )
+    addMapping("Inter", 0, 0, "Inter")
+    addMapping("Inter", 1, 0, "Inter-Bold")
+    addMapping("Inter", 0, 1, "Inter-Italic")
+    addMapping("Inter", 1, 1, "Inter-BoldItalic")
+    PDF_FONT = "Inter"
+    PDF_FONT_BOLD = "Inter-Bold"
+    PDF_FONT_ITALIC = "Inter-Italic"
+    PDF_FONT_BOLD_ITALIC = "Inter-BoldItalic"
+    logging.getLogger("ciblecv").info("Registered Inter font family for PDF rendering")
+except Exception as _font_err:  # pragma: no cover - defensive fallback
+    logging.getLogger("ciblecv").warning("Inter font registration failed, falling back to Helvetica: %s", _font_err)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -866,18 +901,18 @@ def _pdf_styles(accent_hex: str) -> Dict[str, ParagraphStyle]:
     accent = colors.HexColor(accent_hex)
     muted = colors.HexColor("#6B6B6B")
     return {
-        "name": ParagraphStyle("Name", fontSize=28, leading=30, fontName="Helvetica-Bold", spaceAfter=2, textColor=colors.black),
-        "headline": ParagraphStyle("Headline", fontSize=13, leading=16, fontName="Helvetica-Oblique", textColor=accent, spaceBefore=6, spaceAfter=6),
-        "contact": ParagraphStyle("Contact", fontSize=9.5, leading=13, fontName="Helvetica", textColor=muted, spaceBefore=2, spaceAfter=8),
-        "section": ParagraphStyle("Section", fontSize=11, leading=14, fontName="Helvetica-Bold", textColor=accent, spaceBefore=14, spaceAfter=0),
-        "body": ParagraphStyle("Body", fontSize=10, leading=14, fontName="Helvetica", spaceAfter=4),
-        "exp_title": ParagraphStyle("ExpTitle", fontSize=11.5, leading=14, fontName="Helvetica-Bold", spaceBefore=6, spaceAfter=0),
-        "exp_meta": ParagraphStyle("ExpMeta", fontSize=9.5, leading=12, fontName="Helvetica-Oblique", textColor=muted, spaceAfter=4),
+        "name": ParagraphStyle("Name", fontSize=28, leading=30, fontName=PDF_FONT_BOLD, spaceAfter=2, textColor=colors.black),
+        "headline": ParagraphStyle("Headline", fontSize=13, leading=16, fontName=PDF_FONT_ITALIC, textColor=accent, spaceBefore=6, spaceAfter=6),
+        "contact": ParagraphStyle("Contact", fontSize=9.5, leading=13, fontName=PDF_FONT, textColor=muted, spaceBefore=2, spaceAfter=8),
+        "section": ParagraphStyle("Section", fontSize=11, leading=14, fontName=PDF_FONT_BOLD, textColor=accent, spaceBefore=14, spaceAfter=0),
+        "body": ParagraphStyle("Body", fontSize=10, leading=14, fontName=PDF_FONT, spaceAfter=4),
+        "exp_title": ParagraphStyle("ExpTitle", fontSize=11.5, leading=14, fontName=PDF_FONT_BOLD, spaceBefore=6, spaceAfter=0),
+        "exp_meta": ParagraphStyle("ExpMeta", fontSize=9.5, leading=12, fontName=PDF_FONT_ITALIC, textColor=muted, spaceAfter=4),
         "exp_dates": ParagraphStyle("ExpDates", fontSize=9.5, leading=14, fontName="Courier", textColor=accent, alignment=TA_RIGHT),
-        "bullet": ParagraphStyle("Bullet", fontSize=10, leading=13.5, fontName="Helvetica", leftIndent=12, spaceAfter=1.5),
-        "right": ParagraphStyle("Right", fontSize=11, leading=14, fontName="Helvetica", alignment=TA_RIGHT),
-        "letter_body": ParagraphStyle("LetterBody", fontSize=11, leading=15, fontName="Helvetica", spaceAfter=6),
-        "letter_bold": ParagraphStyle("LetterBold", fontSize=11, leading=15, fontName="Helvetica-Bold"),
+        "bullet": ParagraphStyle("Bullet", fontSize=10, leading=13.5, fontName=PDF_FONT, leftIndent=12, spaceAfter=1.5),
+        "right": ParagraphStyle("Right", fontSize=11, leading=14, fontName=PDF_FONT, alignment=TA_RIGHT),
+        "letter_body": ParagraphStyle("LetterBody", fontSize=11, leading=15, fontName=PDF_FONT, spaceAfter=6),
+        "letter_bold": ParagraphStyle("LetterBold", fontSize=11, leading=15, fontName=PDF_FONT_BOLD),
     }
 
 

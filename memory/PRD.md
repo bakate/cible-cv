@@ -52,6 +52,19 @@ App MVP personnelle pour générer automatiquement un CV moderne et une lettre d
 - Historique avec score de match
 - Design neo-brutalist soft, Cabinet Grotesk + Outfit
 
+## Implémenté (Iter 2 — Feb 2026)
+- Auth Google (Emergent Managed) avec scoping par utilisateur (premier user = admin)
+- Génération PDF native texte côté backend via Reportlab (ATS-friendly) — remplace html2canvas
+- Layouts PDF 1 colonne + 2 colonnes (BalancedColumns)
+- Export Word (.docx) via python-docx
+- ATS Check (score + mots-clés manquants)
+- Regroupement automatique des compétences par famille + surlignage matching offre
+- Couleur d'accent personnalisable + pin Base CV
+- Liens cliquables dans le PDF (email / LinkedIn / portfolio)
+- **Typographie premium Inter (TTF embarqué) dans tous les PDF** (`/app/backend/fonts/Inter-*.ttf`)
+  - Famille enregistrée via `registerFontFamily` + `addMapping` (Regular / Bold / Italic / BoldItalic)
+  - Fallback automatique vers Helvetica si les TTF sont absents
+
 ## Backlog
 - P1 : amélioration de l'éditeur (expériences, formations) en ligne
 - P1 : suggestions d'amélioration manuelles depuis le panneau adaptations
