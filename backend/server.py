@@ -850,30 +850,54 @@ def _contact_link(kind: str, value: str, accent_hex: str) -> str:
     return f'<a href="{_esc(href)}" color="{accent_hex}">{text}</a>'
 
 
+def _soft_color(hex_color: str, mix: float = 0.85) -> str:
+    """Lighter version of a hex color by blending with white."""
+    h = (hex_color or "#FF3E1A").lstrip("#")
+    if len(h) != 6:
+        h = "FF3E1A"
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    sr = int(r * (1 - mix) + 255 * mix)
+    sg = int(g * (1 - mix) + 255 * mix)
+    sb = int(b * (1 - mix) + 255 * mix)
+    return f"#{sr:02X}{sg:02X}{sb:02X}"
+
+
 def _pdf_styles(accent_hex: str) -> Dict[str, ParagraphStyle]:
     accent = colors.HexColor(accent_hex)
-    muted = colors.HexColor("#555555")
+    muted = colors.HexColor("#6B6B6B")
     return {
-        "name": ParagraphStyle("Name", fontSize=22, leading=24, fontName="Helvetica-Bold", spaceAfter=2),
-        "headline": ParagraphStyle("Headline", fontSize=12, leading=15, fontName="Helvetica-Bold", textColor=accent, spaceAfter=4),
-        "contact": ParagraphStyle("Contact", fontSize=9, leading=11, fontName="Helvetica", textColor=muted),
-        "section": ParagraphStyle("Section", fontSize=10.5, leading=13, fontName="Helvetica-Bold", textColor=accent, spaceBefore=10, spaceAfter=4),
-        "body": ParagraphStyle("Body", fontSize=10, leading=13, fontName="Helvetica"),
-        "exp_title": ParagraphStyle("ExpTitle", fontSize=11, leading=13, fontName="Helvetica-Bold", spaceBefore=4, spaceAfter=0),
-        "exp_meta": ParagraphStyle("ExpMeta", fontSize=9.5, leading=12, fontName="Helvetica-Oblique", textColor=muted, spaceAfter=2),
-        "bullet": ParagraphStyle("Bullet", fontSize=10, leading=13, fontName="Helvetica", leftIndent=12),
+        "name": ParagraphStyle("Name", fontSize=28, leading=30, fontName="Helvetica-Bold", spaceAfter=2, textColor=colors.black),
+        "headline": ParagraphStyle("Headline", fontSize=13, leading=16, fontName="Helvetica-Oblique", textColor=accent, spaceBefore=6, spaceAfter=6),
+        "contact": ParagraphStyle("Contact", fontSize=9.5, leading=13, fontName="Helvetica", textColor=muted, spaceBefore=2, spaceAfter=8),
+        "section": ParagraphStyle("Section", fontSize=11, leading=14, fontName="Helvetica-Bold", textColor=accent, spaceBefore=14, spaceAfter=0),
+        "body": ParagraphStyle("Body", fontSize=10, leading=14, fontName="Helvetica", spaceAfter=4),
+        "exp_title": ParagraphStyle("ExpTitle", fontSize=11.5, leading=14, fontName="Helvetica-Bold", spaceBefore=6, spaceAfter=0),
+        "exp_meta": ParagraphStyle("ExpMeta", fontSize=9.5, leading=12, fontName="Helvetica-Oblique", textColor=muted, spaceAfter=4),
+        "exp_dates": ParagraphStyle("ExpDates", fontSize=9.5, leading=14, fontName="Courier", textColor=accent, alignment=TA_RIGHT),
+        "bullet": ParagraphStyle("Bullet", fontSize=10, leading=13.5, fontName="Helvetica", leftIndent=12, spaceAfter=1.5),
         "right": ParagraphStyle("Right", fontSize=11, leading=14, fontName="Helvetica", alignment=TA_RIGHT),
         "letter_body": ParagraphStyle("LetterBody", fontSize=11, leading=15, fontName="Helvetica", spaceAfter=6),
         "letter_bold": ParagraphStyle("LetterBold", fontSize=11, leading=15, fontName="Helvetica-Bold"),
     }
 
 
+def _section_heading(title: str, accent_hex: str, styles: Dict[str, ParagraphStyle]) -> List:
+    """Section title + accent underline bar (returned as a list of flowables)."""
+    return [
+        Paragraph(title.upper(), styles["section"]),
+        HRFlowable(width=36 * mm, thickness=2.2, color=colors.HexColor(accent_hex), spaceBefore=2, spaceAfter=6, hAlign="LEFT"),
+    ]
+
+
 def _pdf_header(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle], accent_hex: str) -> None:
     flow.append(Paragraph(_esc(cv.get("full_name", "")), styles["name"]))
+    # Big accent bar right under the name (visual punch)
+    flow.append(HRFlowable(width=80 * mm, thickness=4, color=colors.HexColor(accent_hex), spaceBefore=4, spaceAfter=2, hAlign="LEFT"))
     if cv.get("headline"):
         flow.append(Paragraph(_esc(cv["headline"]), styles["headline"]))
     contact = cv.get("contact") or {}
     parts = []
+    accent_pretty = f'<font color="{accent_hex}">•</font>'
     for kind in ("email", "phone", "location", "linkedin", "github", "website"):
         val = contact.get(kind)
         if not val:
@@ -883,77 +907,91 @@ def _pdf_header(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle
         else:
             parts.append(_contact_link(kind, val, accent_hex))
     if parts:
-        flow.append(Paragraph(" &nbsp;·&nbsp; ".join(parts), styles["contact"]))
-    flow.append(HRFlowable(width="100%", thickness=1.2, color=colors.black, spaceBefore=4, spaceAfter=4))
+        flow.append(Paragraph(f" &nbsp;{accent_pretty}&nbsp; ".join(parts), styles["contact"]))
 
 
-def _pdf_experiences(flow: List, experiences: List[Dict[str, Any]], styles: Dict[str, ParagraphStyle]) -> None:
+def _pdf_experiences(flow: List, experiences: List[Dict[str, Any]], styles: Dict[str, ParagraphStyle], accent_hex: str) -> None:
     if not experiences:
         return
-    flow.append(Paragraph("EXPÉRIENCES PROFESSIONNELLES", styles["section"]))
+    flow.extend(_section_heading("Expériences professionnelles", accent_hex, styles))
+    accent_chevron = f'<font color="{accent_hex}"><b>›</b></font>'
     for e in experiences:
         title = _esc(e.get("title", ""))
         company = _esc(e.get("company", ""))
-        flow.append(Paragraph(f"<b>{title}</b> · {company}", styles["exp_title"]))
+        flow.append(Paragraph(
+            f'<b>{title}</b> <font color="#9A9A9A">·</font> <font color="#444">{company}</font>',
+            styles["exp_title"],
+        ))
         loc = _esc(e.get("location", ""))
-        dates = f"{_esc(e.get('start', ''))} – {_esc(e.get('end', ''))}"
-        meta = f"{loc} &nbsp;|&nbsp; {dates}" if loc else dates
+        dates = f'{_esc(e.get("start", ""))} – {_esc(e.get("end", ""))}'
+        dates_html = f'<font face="Courier" color="{accent_hex}">{dates}</font>'
+        meta = f"{loc} &nbsp;·&nbsp; {dates_html}" if loc else dates_html
         flow.append(Paragraph(meta, styles["exp_meta"]))
         for b in (e.get("bullets") or []):
-            flow.append(Paragraph(f"•&nbsp; {_esc(b)}", styles["bullet"]))
+            flow.append(Paragraph(f"{accent_chevron}&nbsp; {_esc(b)}", styles["bullet"]))
         flow.append(Spacer(1, 4))
 
 
-def _pdf_education(flow: List, education: List[Dict[str, Any]], styles: Dict[str, ParagraphStyle]) -> None:
+def _pdf_education(flow: List, education: List[Dict[str, Any]], styles: Dict[str, ParagraphStyle], accent_hex: str) -> None:
     if not education:
         return
-    flow.append(Paragraph("FORMATION", styles["section"]))
+    flow.extend(_section_heading("Formation", accent_hex, styles))
     for ed in education:
-        flow.append(Paragraph(f"<b>{_esc(ed.get('degree', ''))}</b> · {_esc(ed.get('school', ''))}", styles["exp_title"]))
-        dates = f"{_esc(ed.get('start', ''))} – {_esc(ed.get('end', ''))}"
+        flow.append(Paragraph(
+            f'<b>{_esc(ed.get("degree", ""))}</b> <font color="#9A9A9A">·</font> <font color="#444">{_esc(ed.get("school", ""))}</font>',
+            styles["exp_title"],
+        ))
+        dates = f'{_esc(ed.get("start", ""))} – {_esc(ed.get("end", ""))}'
+        dates_html = f'<font face="Courier" color="{accent_hex}">{dates}</font>'
+        meta = dates_html
         if ed.get("details"):
-            dates += f" — {_esc(ed['details'])}"
-        flow.append(Paragraph(dates, styles["exp_meta"]))
+            meta += f' &nbsp;·&nbsp; {_esc(ed["details"])}'
+        flow.append(Paragraph(meta, styles["exp_meta"]))
 
 
-def _pdf_skills(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle]) -> None:
+def _pdf_skills(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle], accent_hex: str) -> None:
+    soft = _soft_color(accent_hex, mix=0.86)
+    pill = lambda txt: f'<font backColor="{soft}" color="#0A0A0A">&nbsp;{_esc(txt)}&nbsp;</font>'  # noqa: E731
     if cv.get("skill_groups"):
-        flow.append(Paragraph("COMPÉTENCES", styles["section"]))
+        flow.extend(_section_heading("Compétences", accent_hex, styles))
         for g in cv["skill_groups"]:
             cat = _esc(g.get("category", ""))
-            items = " · ".join(_esc(i) for i in (g.get("items") or []))
-            flow.append(Paragraph(f"<b>{cat} :</b> {items}", styles["body"]))
+            items = "&nbsp; ".join(pill(i) for i in (g.get("items") or []))
+            flow.append(Paragraph(
+                f'<b><font color="{accent_hex}">{cat}</font></b> &nbsp; {items}',
+                styles["body"],
+            ))
             flow.append(Spacer(1, 2))
         return
     if cv.get("skills"):
-        flow.append(Paragraph("COMPÉTENCES", styles["section"]))
-        flow.append(Paragraph(" · ".join(_esc(s) for s in cv["skills"]), styles["body"]))
+        flow.extend(_section_heading("Compétences", accent_hex, styles))
+        flow.append(Paragraph("&nbsp; ".join(pill(s) for s in cv["skills"]), styles["body"]))
     if cv.get("tools"):
-        flow.append(Paragraph("OUTILS", styles["section"]))
-        flow.append(Paragraph(" · ".join(_esc(s) for s in cv["tools"]), styles["body"]))
+        flow.extend(_section_heading("Outils", accent_hex, styles))
+        flow.append(Paragraph("&nbsp; ".join(pill(s) for s in cv["tools"]), styles["body"]))
 
 
-def _pdf_extras(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle]) -> None:
+def _pdf_extras(flow: List, cv: Dict[str, Any], styles: Dict[str, ParagraphStyle], accent_hex: str) -> None:
     if cv.get("languages"):
-        flow.append(Paragraph("LANGUES", styles["section"]))
-        langs = " · ".join(
-            f"{_esc(lang.get('name', ''))} ({_esc(lang.get('level', ''))})"
+        flow.extend(_section_heading("Langues", accent_hex, styles))
+        langs = " &nbsp;·&nbsp; ".join(
+            f'<b>{_esc(lang.get("name", ""))}</b> <font color="#6B6B6B">{_esc(lang.get("level", ""))}</font>'
             for lang in cv["languages"]
             if lang.get("name")
         )
         flow.append(Paragraph(langs, styles["body"]))
     if cv.get("certifications"):
-        flow.append(Paragraph("CERTIFICATIONS", styles["section"]))
+        flow.extend(_section_heading("Certifications", accent_hex, styles))
         for cer in cv["certifications"]:
-            line = _esc(cer.get("name", ""))
+            line = f'<b>{_esc(cer.get("name", ""))}</b>'
             if cer.get("issuer"):
-                line += f" — {_esc(cer['issuer'])}"
+                line += f' <font color="#9A9A9A">·</font> <font color="#444">{_esc(cer["issuer"])}</font>'
             if cer.get("year"):
-                line += f" ({_esc(cer['year'])})"
+                line += f' <font color="#9A9A9A">({_esc(cer["year"])})</font>'
             flow.append(Paragraph(line, styles["body"]))
     if cv.get("interests"):
-        flow.append(Paragraph("CENTRES D'INTÉRÊT", styles["section"]))
-        flow.append(Paragraph(" · ".join(_esc(i) for i in cv["interests"]), styles["body"]))
+        flow.extend(_section_heading("Centres d'intérêt", accent_hex, styles))
+        flow.append(Paragraph(" &nbsp;·&nbsp; ".join(_esc(i) for i in cv["interests"]), styles["body"]))
 
 
 def build_cv_pdf_text(cv: Dict[str, Any], layout: str = "single") -> bytes:
@@ -968,18 +1006,17 @@ def build_cv_pdf_text(cv: Dict[str, Any], layout: str = "single") -> bytes:
     )
 
     if layout == "two-col":
-        # Header full-width then two balanced columns (auto-paginating).
         flow: List = []
         _pdf_header(flow, cv, styles, accent_hex)
 
         body: List = []
         if cv.get("summary"):
-            body.append(Paragraph("PROFIL", styles["section"]))
+            body.extend(_section_heading("Profil", accent_hex, styles))
             body.append(Paragraph(_esc(cv["summary"]), styles["body"]))
-        _pdf_experiences(body, cv.get("experiences") or [], styles)
-        _pdf_education(body, cv.get("education") or [], styles)
-        _pdf_skills(body, cv, styles)
-        _pdf_extras(body, cv, styles)
+        _pdf_experiences(body, cv.get("experiences") or [], styles, accent_hex)
+        _pdf_education(body, cv.get("education") or [], styles, accent_hex)
+        _pdf_skills(body, cv, styles, accent_hex)
+        _pdf_extras(body, cv, styles, accent_hex)
 
         flow.append(
             BalancedColumns(
@@ -999,12 +1036,12 @@ def build_cv_pdf_text(cv: Dict[str, Any], layout: str = "single") -> bytes:
     flow = []
     _pdf_header(flow, cv, styles, accent_hex)
     if cv.get("summary"):
-        flow.append(Paragraph("PROFIL", styles["section"]))
+        flow.extend(_section_heading("Profil", accent_hex, styles))
         flow.append(Paragraph(_esc(cv["summary"]), styles["body"]))
-    _pdf_experiences(flow, cv.get("experiences") or [], styles)
-    _pdf_education(flow, cv.get("education") or [], styles)
-    _pdf_skills(flow, cv, styles)
-    _pdf_extras(flow, cv, styles)
+    _pdf_experiences(flow, cv.get("experiences") or [], styles, accent_hex)
+    _pdf_education(flow, cv.get("education") or [], styles, accent_hex)
+    _pdf_skills(flow, cv, styles, accent_hex)
+    _pdf_extras(flow, cv, styles, accent_hex)
     doc.build(flow)
     return buf.getvalue()
 
