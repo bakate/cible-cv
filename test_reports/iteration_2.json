@@ -1,0 +1,31 @@
+{
+  "summary": "Full e2e regression after hexagonal + XState refactor. Backend: 29/29 pytest tests pass against public preview URL (health, auth 401/200 with Bearer admin-session-refactor, list/get/put/delete generations incl. existing 667070ff-8685-4f61-aceb-b5a012782f66, empty-patch 400, parse URL/PDF happy + error, all 5 export endpoints, base-profile PUT/GET/DELETE lifecycle, regroup-skills + ats-check via real Claude LLM, full generate lifecycle ~30s + CRUD). Frontend: full Playwright walkthrough of /login → cookie login → wizard steps 1→2→3 (empty-next toast, manual profile, back preserves value, job paste, template-startup, back), /history grid + card navigation, /preview all interactions (tabs, highlight toggle, pdf-layout-two-col, template switch startup/corporate w/ PUT persistence, edit-panel-cv edit-name + add/remove experience + save toast, reload persistence, restore, letter tab edit-panel-letter + copy toast, ats-modal + ats-score via real LLM, pin-base toast, export-pdf toast, delete-generation dismiss → gen untouched), logout → /login, cleared cookies → / redirects to /login. All acceptance criteria met.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Copy letter to clipboard", "issue": "In headless browser without clipboard permission, copy-letter-button surfaces raw error 'Failed to execute writeText on Clipboard: Write permission denied' via toast instead of catching and falling back gracefully (execCommand or user-friendly message). Not a regression (behaves same in prod for insecure contexts), just UX polish.", "affected_selectors": ["[data-testid='copy-letter-button']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_regression_refactor.py",
+    "/app/test_reports/pytest/regression_refactor.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Router is clean and thin — good hexagonal separation. Auth wired via Depends(get_current_user)/get_scope on every protected endpoint.",
+    "ATS check on frontend appears to be exposed only on the CV tab (button not present when letter tab is active). Consistent, but confirm this is intended (spec did not mandate tab-specific visibility).",
+    "copy-letter-button should wrap navigator.clipboard.writeText in try/catch and show 'Lettre copiée' or a friendly fallback instead of the raw browser error.",
+    "Response 400 message for empty patch is French — good; ensure i18n consistency across all validation messages.",
+    "No pagination on GET /api/generations — may need it once list grows; not blocking."
+  ],
+  "updated_files": ["/app/backend/tests/test_regression_refactor.py"],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "100% of tested flows"},
+  "test_credentials": "Bearer admin-session-refactor / cookie session_token=admin-session-refactor (admin.test@example.com, role=admin). Existing generation id 667070ff-8685-4f61-aceb-b5a012782f66.",
+  "seed_data_creation": "test_generate_full creates a temporary generation and deletes it in the same class. During UI test the 'Bakate BA' name of existing generation 667070ff... was temporarily suffixed with ' TEST' to verify persistence and then restored to original 'Bakate BA'. Template of existing gen was toggled startup→corporate and returned to corporate. Base profile was written then deleted (net zero).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Use `pytest /app/backend/tests/test_regression_refactor.py -v` for a 60-70s full regression (includes real LLM calls). Auth is via Authorization: Bearer admin-session-refactor header or session_token cookie. Frontend contract data-testids verified: step-{1,2,3}-content, wizard-{next,back}-button, profile-mode-manual, manual-profile-input, job-mode-paste, job-text-input, template-startup, admin-badge, logout-button, google-login-button, history-grid, history-card-{id}, match-score-card, keywords-matched, tab-cv, tab-letter, toggle-highlight-button, pdf-layout-two-col, switch-startup, switch-corporate, toggle-edit-button, edit-panel-cv, edit-name, add-experience, remove-experience-{i}, edit-exp-{i}, edit-panel-letter, copy-letter-button, ats-check-button, ats-modal, ats-score, ats-modal-close, pin-base-button, export-pdf-button, delete-generation-button.",
+  "rca of the issue": "n/a — no regressions"
+}
