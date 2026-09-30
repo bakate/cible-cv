@@ -65,6 +65,14 @@ App MVP personnelle pour générer automatiquement un CV moderne et une lettre d
   - Famille enregistrée via `registerFontFamily` + `addMapping` (Regular / Bold / Italic / BoldItalic)
   - Fallback automatique vers Helvetica si les TTF sont absents
 
+## Implémenté (Iter 3 — Juin 2026) — Refonte architecture
+- **Backend hexagonal** : `app/domain` (modèles Pydantic, règles, prompts, erreurs) → `app/application` (ports Protocol + use cases) → `app/adapters` (inbound HTTP FastAPI fin ; outbound Mongo/Claude/parsers/OAuth/Reportlab/docx). Composition root `app/container.py`, `server.py` réduit au câblage. Contrats API inchangés.
+- **Frontend hexagonal + XState v5** : `src/core` en TypeScript (types, règles pures, ports, machines auth/wizard/preview/history/ats), `src/infrastructure` (adapters axios + navigateur), `src/shell` (pages/composants React = coquille sans logique). Toasts et navigation sont émis par les machines (`emit`) et exécutés par `useShellEffects`.
+- Édition du CV pilotée par événements à chemin (`EDIT_SET/EDIT_APPEND/EDIT_REMOVE`) appliqués immuablement dans le domaine.
+- Tests : `backend/tests/unit` (20 tests pytest, fakes in-memory) ; `frontend/src/core/__tests__` (23 tests jest, services fake).
+- Dépendances nettoyées : html2pdf.js, html2canvas, jspdf, react-query, swr, zod, recharts, lodash, dayjs, date-fns, framer-motion retirés. Ajout xstate, @xstate/react, typescript 5.9. `jsconfig.json` remplacé par `tsconfig.json`.
+- Doc : `/app/ARCHITECTURE.md`.
+
 ## Backlog
 - P1 : amélioration de l'éditeur (expériences, formations) en ligne
 - P1 : suggestions d'amélioration manuelles depuis le panneau adaptations
